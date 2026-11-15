@@ -24,6 +24,10 @@ class Role(StrEnum):
     ADMIN = "admin"
 
 
+class IdempotencyConflict(ValueError):
+    """An idempotency key has been used already and cannot issue a second secret."""
+
+
 @dataclass(frozen=True, slots=True)
 class Principal:
     """Authenticated, tenant-bound caller context."""

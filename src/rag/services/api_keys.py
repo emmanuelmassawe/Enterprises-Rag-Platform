@@ -9,7 +9,14 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from rag.domain.auth import ApiKeyCredentials, ApiKeyRecord, Principal, Scope, role_for_scopes
+from rag.domain.auth import (
+    ApiKeyCredentials,
+    ApiKeyRecord,
+    IdempotencyConflict,
+    Principal,
+    Scope,
+    role_for_scopes,
+)
 from rag.domain.ports.api_keys import ApiKeyStore
 
 TOKEN_PREFIX = "rag"
@@ -70,13 +77,14 @@ class ApiKeyService:
         name: str,
         scopes: frozenset[Scope],
         expires_at: datetime | None,
+        idempotency_key: str,
     ) -> tuple[ApiKeyRecord, str]:
         """Create a tenant key, returning its random secret exactly to this caller."""
         if Scope.ADMIN not in actor.scopes:
             raise InvalidKeyGrant("admin scope is required")
         if not name.strip() or len(name) > 120 or not scopes:
             raise InvalidKeyGrant("key name and at least one scope are required")
-        if not scopes.issubset(actor.scopes):
+        if not all(actor.allows(scope) for scope in scopes):
             raise InvalidKeyGrant("requested scopes exceed caller authority")
         now = datetime.now(UTC)
         if expires_at is not None and expires_at <= now:
@@ -92,7 +100,11 @@ class ApiKeyService:
             created_at=now,
             expires_at=expires_at,
         )
-        await self._store.create(record)
+        idempotency_hash = hashlib.sha256(idempotency_key.encode("ascii")).hexdigest()
+        request_digest = hashlib.sha256(
+            f"{name.strip()}\n{','.join(sorted(scope.value for scope in scopes))}\n{expires_at}".encode()
+        ).hexdigest()
+        await self._store.create(record, idempotency_hash, request_digest)
         token = f"{TOKEN_PREFIX}.{actor.tenant_id}.{key_id}.{secret}"
         return record, token
 

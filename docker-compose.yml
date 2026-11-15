@@ -5,6 +5,9 @@ services:
     environment:
       APP_ENV: development
       LOG_LEVEL: INFO
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://rag_runtime@db:5432/enterprise_rag}
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:-postgresql+asyncpg://rag_migrator@db:5432/enterprise_rag}
+      REDIS_URL: ${REDIS_URL:-redis://state:6379/0}
       METRICS_SCRAPE_TOKEN: ${METRICS_SCRAPE_TOKEN:-}
     ports:
       - "127.0.0.1:8000:8000"
@@ -16,6 +19,14 @@ services:
     cap_drop:
       - ALL
     restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      state:
+        condition: service_healthy
+    networks:
+      - default
+      - backend
     healthcheck:
       test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
       interval: 15s
@@ -23,3 +34,39 @@ services:
       retries: 3
       start_period: 10s
 
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: enterprise_rag
+      POSTGRES_USER: rag_migrator
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/postgres/init_roles.sql:/docker-entrypoint-initdb.d/00-roles.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag_migrator -d enterprise_rag"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - backend
+
+  state:
+    image: redis:8.2-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - backend
+
+volumes:
+  postgres_data:
+
+networks:
+  default:
+    name: enterprisesragplatform_default
+  backend:
+    internal: true

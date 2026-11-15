@@ -81,6 +81,10 @@ class RedisRateLimiter:
         """Close this Redis client's owned connection pool."""
         await self._client.aclose()
 
+    async def ping(self) -> bool:
+        """Check the shared rate-limit store is reachable."""
+        return bool(await self._client.ping())
+
 
 class FallbackRateLimiter:
     """Degrade to a stricter local cap when shared rate-limit state is unavailable."""
