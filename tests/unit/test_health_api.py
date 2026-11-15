@@ -19,14 +19,17 @@ def test_healthz_reports_liveness_without_dependencies() -> None:
     assert response.headers["x-request-id"].startswith("req_")
 
 
-def test_readyz_reports_only_dependencies_present_in_milestone_one() -> None:
-    """Readiness must not claim external dependency checks before adapters exist."""
+def test_readyz_reports_missing_dependencies_as_not_ready() -> None:
+    """Readiness requires the database and shared rate limiter after milestone two."""
     client = TestClient(create_app(Settings(app_env="test")))
 
     response = client.get("/readyz")
 
-    assert response.status_code == 200
-    assert response.json() == {"status": "ready", "checks": {"api": "ok"}}
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "not_ready",
+        "checks": {"api": "ok", "database": "not_configured", "rate_limiter": "local_fallback"},
+    }
 
 
 def test_unmatched_route_uses_problem_details() -> None:

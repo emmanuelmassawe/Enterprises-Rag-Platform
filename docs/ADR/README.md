@@ -15,4 +15,5 @@ Status: proposed decisions for Phase 0 review. Approval of Phase 0 is required b
 | [ADR-009](ADR-009-web-bff.md) | Next.js BFF with Google sign-in and secure same-origin session. |
 | [ADR-010](ADR-010-render-terraform.md) | Render deployment managed by official Terraform provider. |
 | [ADR-011](ADR-011-observability.md) | OTel/Alloy/Grafana Cloud for platform telemetry and LangSmith for redacted LLM traces. |
+| [ADR-012](ADR-012-milestone-2-persistence-and-auth.md) | Milestone 2 implementation choices for async persistence, forced RLS, hashed API keys, and Redis rate limiting. |
 

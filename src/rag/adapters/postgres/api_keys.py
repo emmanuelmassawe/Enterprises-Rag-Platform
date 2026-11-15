@@ -48,9 +48,15 @@ class PostgresApiKeyStore(ApiKeyStore):
             now = datetime.now(UTC)
             await session.execute(
                 delete(IdempotencyRecord).where(
-                    IdempotencyRecord.tenant_id == record.tenant_id,
-                    IdempotencyRecord.key_hash == idempotency_hash,
-                    IdempotencyRecord.expires_at <= now,
+                    IdempotencyRecord.id.in_(
+                        select(IdempotencyRecord.id)
+                        .where(
+                            IdempotencyRecord.tenant_id == record.tenant_id,
+                            IdempotencyRecord.expires_at <= now,
+                        )
+                        .order_by(IdempotencyRecord.expires_at)
+                        .limit(100)
+                    )
                 )
             )
             claim = await session.execute(
@@ -68,7 +74,7 @@ class PostgresApiKeyStore(ApiKeyStore):
                 .returning(IdempotencyRecord.id)
             )
             if claim.scalar_one_or_none() is None:
-                raise IdempotencyConflict("idempotency key already used; no new key was created")
+                raise IdempotencyConflict("idempotency key already used")
             session.add(
                 ApiKey(
                     id=record.id,

@@ -5,9 +5,8 @@ services:
     environment:
       APP_ENV: development
       LOG_LEVEL: INFO
-      DATABASE_URL: ${COMPOSE_DATABASE_URL:-postgresql+asyncpg://rag_runtime@db:5432/enterprise_rag}
-      MIGRATION_DATABASE_URL: ${COMPOSE_MIGRATION_DATABASE_URL:-postgresql+asyncpg://rag_migrator@db:5432/enterprise_rag}
-      REDIS_URL: ${COMPOSE_REDIS_URL:-redis://state:6379/0}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://rag_runtime@db:5432/enterprise_rag}
+      REDIS_URL: ${REDIS_URL:-redis://state:6379/0}
       METRICS_SCRAPE_TOKEN: ${METRICS_SCRAPE_TOKEN:-}
     ports:
       - "127.0.0.1:8000:8000"
@@ -34,8 +33,25 @@ services:
       retries: 3
       start_period: 10s
 
+  migrator:
+    build:
+      context: .
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      APP_ENV: development
+      LOG_LEVEL: INFO
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:-postgresql+asyncpg://rag_migrator@db:5432/enterprise_rag}
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles: ["tools"]
+    volumes:
+      - ./:/app
+    networks:
+      - backend
+
   db:
-    image: pgvector/pgvector:pg17
+    image: pgvector/pgvector:pg17@sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd
     environment:
       POSTGRES_DB: enterprise_rag
       POSTGRES_USER: rag_migrator
@@ -43,8 +59,6 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/postgres/init_roles.sql:/docker-entrypoint-initdb.d/00-roles.sql:ro
-    ports:
-      - "127.0.0.1:55432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rag_migrator -d enterprise_rag"]
       interval: 5s
@@ -54,10 +68,8 @@ services:
       - backend
 
   state:
-    image: redis:8.2-alpine
+    image: redis:8.2-alpine@sha256:da23c2478319ceb4903857d77a2fd7aa5137d9e9d4c8165dafbacedac6403e95
     command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
-    ports:
-      - "127.0.0.1:56379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s

@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass
 class ProblemException(Exception):
     """An expected application failure with a stable RFC 9457 problem code."""
 

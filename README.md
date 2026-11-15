@@ -36,7 +36,7 @@ Prerequisites: Python 3.12 and [uv](https://docs.astral.sh/uv/); Docker Engine w
 uv sync --all-groups
 docker compose up -d db state
 make migrate
-uv run uvicorn rag.composition:app --app-dir src --host 127.0.0.1 --port 8000 --reload
+docker compose up --build api
 ```
 
 In another terminal, `make smoke` checks liveness and readiness. Or run `docker compose up --build` and open `http://127.0.0.1:8000/healthz`. `/metrics` returns 403 until `METRICS_SCRAPE_TOKEN` is set to a random value of at least 32 characters and supplied as a Bearer token. Local Postgres uses trust authentication only on an unexposed internal Compose network; production must use managed credentials and separate runtime/migration roles.

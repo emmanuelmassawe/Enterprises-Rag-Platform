@@ -4,7 +4,7 @@ setup:
 	uv sync --all-groups
 
 dev:
-uv run uvicorn rag.composition:app --app-dir src --host 127.0.0.1 --port 8000 --reload
+	docker compose up --build api
 
 test:
 	uv run coverage run -m pytest
@@ -25,7 +25,7 @@ security-audit:
 	uv run pip-audit --skip-editable
 
 migrate:
-	uv run alembic upgrade head
+	docker compose --profile tools run --rm migrator
 
 # These targets are activated in the milestones that introduce their tools and data.
 eval redteam load-test tf-plan tf-apply:

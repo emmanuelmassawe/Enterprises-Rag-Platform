@@ -59,7 +59,14 @@ class User(TenantRow, Base):
 
 class ApiKey(TenantRow, Base):
     __tablename__ = "api_keys"
-    __table_args__ = (UniqueConstraint("tenant_id", "id", name="uq_api_keys_tenant_id_id"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_api_keys_tenant_id_id"),
+        ForeignKeyConstraint(
+            ["tenant_id", "created_by_id"],
+            ["users.tenant_id", "users.id"],
+            ondelete="RESTRICT",
+        ),
+    )
 
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     secret_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
@@ -195,7 +202,14 @@ class Job(TenantRow, Base):
 
 class Conversation(TenantRow, Base):
     __tablename__ = "conversations"
-    __table_args__ = (UniqueConstraint("tenant_id", "id", name="uq_conversations_tenant_id_id"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_conversations_tenant_id_id"),
+        ForeignKeyConstraint(
+            ["tenant_id", "owner_id"],
+            ["users.tenant_id", "users.id"],
+            ondelete="CASCADE",
+        ),
+    )
 
     owner_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     title: Mapped[str] = mapped_column(
@@ -232,7 +246,14 @@ class Message(TenantRow, Base):
 
 class QueryLog(TenantRow, Base):
     __tablename__ = "query_logs"
-    __table_args__ = (Index("ix_query_logs_tenant_created", "tenant_id", "created_at"),)
+    __table_args__ = (
+        Index("ix_query_logs_tenant_created", "tenant_id", "created_at"),
+        ForeignKeyConstraint(
+            ["tenant_id", "key_id"],
+            ["api_keys.tenant_id", "api_keys.id"],
+            ondelete="RESTRICT",
+        ),
+    )
 
     key_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     question: Mapped[str] = mapped_column(Text, nullable=False)

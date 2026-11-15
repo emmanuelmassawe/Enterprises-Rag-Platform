@@ -17,6 +17,7 @@ RUN python -m venv /opt/venv \
     && groupadd --system app \
     && useradd --system --gid app --home-dir /app --create-home app
 WORKDIR /app
+COPY alembic.ini ./
 COPY --from=builder /wheels /wheels
 RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
 COPY --chown=app:app src ./src

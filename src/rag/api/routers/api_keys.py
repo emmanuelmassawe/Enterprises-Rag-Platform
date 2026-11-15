@@ -148,7 +148,7 @@ async def create_api_key(
             409,
             "idempotency_conflict",
             "Conflict",
-            "This idempotency key was already used. No new key was created.",
+            "This idempotency key was already used. Submit a new key to issue another API key.",
         ) from exc
     return ApiKeyCreated(key=_public_key(record), secret=secret)
 
