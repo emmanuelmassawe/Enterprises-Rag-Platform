@@ -47,8 +47,6 @@ In another terminal, `make smoke` checks liveness and readiness. Or run `docker 
 | `APP_ENV` | `development` | Environment: development, test, staging, production. |
 | `LOG_LEVEL` | `INFO` | Minimum structured log level. |
 | `METRICS_SCRAPE_TOKEN` | unset | Strong bearer secret required for `/metrics`; unset denies access. |
-| `MAX_REQUEST_BODY_BYTES` | `1048576` | Validated maximum JSON body budget; enforced on request middleware in a later milestone. |
-
 Copy `.env.example` to `.env` for local changes. Never commit `.env`.
 
 ## Tooling

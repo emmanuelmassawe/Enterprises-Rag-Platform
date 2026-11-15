@@ -1,6 +1,8 @@
 """Behavior tests for the initial operational HTTP contract."""
 
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
+import pytest
 
 from rag.api.main import create_app
 from rag.core.config import Settings
@@ -50,4 +52,20 @@ def test_metrics_route_requires_bearer_secret() -> None:
     assert denied.status_code == 403
     assert allowed.status_code == 200
     assert "rag_http_requests_total" in allowed.text
+
+
+def test_metrics_token_must_be_strong() -> None:
+    """Reject weak scrape credentials during settings validation."""
+    with pytest.raises(ValidationError):
+        Settings(metrics_scrape_token="short")
+
+
+def test_metrics_route_is_disabled_when_token_is_empty() -> None:
+    """An empty local env value must not expose metrics or prevent startup."""
+    client = TestClient(create_app(Settings(app_env="test", metrics_scrape_token="")))
+
+    response = client.get("/metrics", headers={"Authorization": f"Bearer {'a' * 40}"})
+
+    assert response.status_code == 403
+
 

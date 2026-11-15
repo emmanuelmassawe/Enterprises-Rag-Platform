@@ -52,7 +52,7 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "C4", "C90", "SIM", "S", "T20"]
-ignore = ["S104"]
+ignore = ["S101", "S104"]
 mccabe.max-complexity = 10
 
 [tool.mypy]
