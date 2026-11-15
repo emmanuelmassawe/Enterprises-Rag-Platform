@@ -1,0 +1,1174 @@
+﻿openapi: 3.1.0
+info:
+  title: Enterprise RAG API
+  version: 1.0.0-draft
+  summary: Tenant-scoped document retrieval and grounded answers
+  description: Design contract for Phase 0 review. Synthetic examples only; pending owner approval.
+  contact:
+    name: Platform owner
+servers:
+  - url: https://{api_host}
+    description: Proposed hosted API; host is environment-specific.
+    variables:
+      api_host:
+        default: api.example.invalid
+  - url: http://localhost:8000
+    description: Proposed local development endpoint.
+tags:
+  - name: Documents
+  - name: Jobs
+  - name: Collections
+  - name: Query
+  - name: Conversations
+  - name: Feedback
+  - name: Admin
+  - name: Operations
+security:
+  - ApiKey: []
+  - BffSession: []
+paths:
+  /v1/documents:
+    post:
+      tags: [Documents]
+      operationId: uploadDocument
+      summary: Upload a PDF for asynchronous ingestion
+      description: One PDF per multipart request. Idempotency-Key required. Limits are configurable; proposed default max is 100 MiB.
+      security:
+        - ApiKey: [write]
+        - BffSession: [editor]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, collection_id]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                collection_id:
+                  type: string
+                  minLength: 1
+                  maxLength: 80
+                metadata:
+                  type: string
+                  description: JSON object encoded as a string; keys are allowlisted by server.
+            encoding:
+              file:
+                contentType: application/pdf
+            examples:
+              synthetic:
+                value:
+                  collection_id: col_01JEXAMPLE
+                  metadata: '{"source":"handbook"}'
+      responses:
+        '202':
+          description: Upload accepted; processing is asynchronous.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestId'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DocumentJob'}
+              example:
+                document: {id: doc_01JEXAMPLE, collection_id: col_01JEXAMPLE, filename: handbook.pdf, media_type: application/pdf, size_bytes: 482100, status: queued, created_at: '2026-01-01T12:00:00Z'}
+                job: {id: job_01JEXAMPLE, status: queued, progress: 0, created_at: '2026-01-01T12:00:00Z'}
+                request_id: req_01JEXAMPLE
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/TooLarge'}
+        '415': {$ref: '#/components/responses/UnsupportedMedia'}
+        '422': {$ref: '#/components/responses/Validation'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    get:
+      tags: [Documents]
+      operationId: listDocuments
+      summary: List documents in the resolved tenant
+      security:
+        - ApiKey: [read]
+        - BffSession: [viewer]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: collection_id
+          in: query
+          schema: {type: string, maxLength: 80}
+        - name: status
+          in: query
+          schema: {$ref: '#/components/schemas/DocumentStatus'}
+        - name: q
+          in: query
+          schema: {type: string, maxLength: 200}
+      responses:
+        '200':
+          description: Document page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DocumentPage'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/Validation'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /v1/documents/{document_id}:
+    parameters:
+      - $ref: '#/components/parameters/DocumentId'
+    get:
+      tags: [Documents]
+      operationId: getDocument
+      summary: Get document metadata and current status
+      security:
+        - ApiKey: [read]
+        - BffSession: [viewer]
+      responses:
+        '200':
+          description: Document.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Document'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      tags: [Documents]
+      operationId: deleteDocument
+      summary: Start tenant-scoped deletion cascade
+      security:
+        - ApiKey: [write]
+        - BffSession: [editor]
+      responses:
+        '202':
+          description: Deletion operation accepted.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeleteOperation'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/jobs/{job_id}:
+    parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema: {type: string, minLength: 1, maxLength: 80}
+    get:
+      tags: [Jobs]
+      operationId: getJob
+      summary: Poll ingestion or deletion status
+      security:
+        - ApiKey: [read]
+        - BffSession: [viewer]
+      responses:
+        '200':
+          description: Job status.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Job'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      tags: [Jobs]
+      operationId: cancelJob
+      summary: Cancel a queued or cancellable running job
+      security:
+        - ApiKey: [write]
+        - BffSession: [editor]
+      responses:
+        '202':
+          description: Cancellation requested.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Job'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/jobs/{job_id}/retry:
+    post:
+      tags: [Jobs]
+      operationId: retryJob
+      summary: Retry an eligible failed job
+      security:
+        - ApiKey: [write]
+        - BffSession: [editor]
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 80}
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Retry enqueued.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Job'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/collections:
+    get:
+      tags: [Collections]
+      operationId: listCollections
+      summary: List tenant collections
+      security: [{ApiKey: [read]}, {BffSession: [viewer]}]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Collection page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CollectionPage'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [Collections]
+      operationId: createCollection
+      summary: Create a collection
+      security: [{ApiKey: [write]}, {BffSession: [editor]}]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CollectionInput'}
+            example: {name: Employee handbook, description: Current policies}
+      responses:
+        '201':
+          description: Collection created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Collection'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Validation'}
+    parameters: []
+  /v1/collections/{collection_id}:
+    parameters:
+      - name: collection_id
+        in: path
+        required: true
+        schema: {type: string, minLength: 1, maxLength: 80}
+    get:
+      tags: [Collections]
+      operationId: getCollection
+      summary: Get a collection
+      security: [{ApiKey: [read]}, {BffSession: [viewer]}]
+      responses:
+        '200':
+          description: Collection.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Collection'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      tags: [Collections]
+      operationId: updateCollection
+      summary: Rename or update collection metadata
+      security: [{ApiKey: [write]}, {BffSession: [editor]}]
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CollectionPatch'}
+            example: {name: Employee policies, description: Latest policy set}
+      responses:
+        '200':
+          description: Updated collection.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Collection'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      tags: [Collections]
+      operationId: deleteCollection
+      summary: Start collection and document deletion cascade
+      security: [{ApiKey: [write]}, {BffSession: [editor]}]
+      responses:
+        '202':
+          description: Deletion accepted.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeleteOperation'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/query:
+    post:
+      tags: [Query]
+      operationId: queryKnowledgeBase
+      summary: Query authorized collections, optionally streaming via SSE
+      description: For stream=true, response uses text/event-stream and follows x-sse-contract. It is not automatically resumable; client cancellation is best effort.
+      security: [{ApiKey: [read]}, {BffSession: [viewer]}]
+      parameters:
+        - name: Accept
+          in: header
+          required: false
+          schema: {type: string, enum: [application/json, text/event-stream]}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/QueryInput'}
+            example:
+              question: What does the handbook say about leave?
+              collection_ids: [col_01JEXAMPLE]
+              conversation_id: conv_01JEXAMPLE
+              stream: true
+              top_k: 8
+      responses:
+        '200':
+          description: Non-streamed result, or SSE stream when stream=true.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/QueryResult'}
+              example:
+                answer: Eligible staff receive annual leave as described in the cited section.
+                citations:
+                  - {chunk_id: chk_01JEXAMPLE, document_id: doc_01JEXAMPLE, filename: handbook.pdf, page: 12, quote: Eligible staff receive annual leave.}
+                refusal: null
+                usage: {input_tokens: 750, output_tokens: 68, estimated_cost_usd: 0.0012}
+                request_id: req_01JEXAMPLE
+            text/event-stream:
+              schema: {type: string}
+              example: "event: retrieval_started\ndata: {\"contract_version\":\"rag.query.v1\",\"request_id\":\"req_01JEXAMPLE\",\"collection_ids\":[\"col_01JEXAMPLE\"]}\n\nevent: citations\ndata: {\"contract_version\":\"rag.query.v1\",\"request_id\":\"req_01JEXAMPLE\",\"citations\":[]}\n\nevent: token\ndata: {\"contract_version\":\"rag.query.v1\",\"request_id\":\"req_01JEXAMPLE\",\"sequence\":1,\"text\":\"Eligible staff...\"}\n\nevent: done\ndata: {\"contract_version\":\"rag.query.v1\",\"request_id\":\"req_01JEXAMPLE\",\"usage\":{\"input_tokens\":750,\"output_tokens\":68,\"estimated_cost_usd\":0.0012}}\n\n"
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/Validation'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+      x-sse-contract:
+        id: rag.query.v1
+        reconnect: not-resumable; ignore Last-Event-ID; explicit client retry creates a new query
+        terminal_events: [done, error]
+        terminal_exactly_once: true
+        order: [retrieval_started, citations, token*, done|error]
+        refusal_order: [retrieval_started, citations, refusal, done]
+        cancellation: AbortController closes stream; server stops work best-effort within configured provider timeout
+        events:
+          retrieval_started: {required: [contract_version, request_id, collection_ids]}
+          citations: {required: [contract_version, request_id, citations]}
+          token: {required: [contract_version, request_id, sequence, text]}
+          refusal: {required: [contract_version, request_id, code, message]}
+          done: {required: [contract_version, request_id, usage], optional: [langsmith_run_id]}
+          error: {required: [contract_version, request_id, problem]}
+  /v1/conversations:
+    post:
+      tags: [Conversations]
+      operationId: createConversation
+      summary: Create conversation
+      security: [{ApiKey: [read]}, {BffSession: [viewer]}]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ConversationInput'}
+            example: {title: Leave policy, collection_ids: [col_01JEXAMPLE]}
+      responses:
+        '201':
+          description: Created conversation.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Conversation'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/Validation'}
+    get:
+      tags: [Conversations]
+      operationId: listConversations
+      summary: List/search current user's conversations
+      security: [{ApiKey: [read]}, {BffSession: [viewer]}]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: q
+          in: query
+          schema: {type: string, maxLength: 200}
+      responses:
+        '200':
+          description: Conversation page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ConversationPage'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /v1/conversations/{conversation_id}:
+    parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema: {type: string, minLength: 1, maxLength: 80}
+    get:
+      tags: [Conversations]
+      operationId: getConversation
+      summary: Get conversation metadata
+      security: [{ApiKey: [read]}, {BffSession: [viewer]}]
+      responses:
+        '200':
+          description: Conversation.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Conversation'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      tags: [Conversations]
+      operationId: updateConversation
+      summary: Rename or pin conversation
+      security: [{ApiKey: [read]}, {BffSession: [viewer]}]
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ConversationPatch'}
+            example: {title: Leave policy notes, pinned: true}
+      responses:
+        '200':
+          description: Updated conversation.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Conversation'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Validation'}
+    delete:
+      tags: [Conversations]
+      operationId: deleteConversation
+      summary: Delete conversation and messages
+      security: [{ApiKey: [read]}, {BffSession: [viewer]}]
+      responses:
+        '204': {description: Deleted.}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /v1/conversations/{conversation_id}/messages:
+    get:
+      tags: [Conversations]
+      operationId: listMessages
+      summary: Page messages in a conversation
+      security: [{ApiKey: [read]}, {BffSession: [viewer]}]
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 80}
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Message page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MessagePage'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /v1/feedback:
+    post:
+      tags: [Feedback]
+      operationId: createFeedback
+      summary: Submit user feedback on an answer
+      security: [{ApiKey: [read]}, {BffSession: [viewer]}]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/FeedbackInput'}
+            example: {request_id: req_01JEXAMPLE, rating: down, reason: Missing a cited policy detail}
+      responses:
+        '201':
+          description: Feedback stored.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Feedback'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Validation'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /v1/admin/quarantine:
+    get:
+      tags: [Admin]
+      operationId: listQuarantine
+      summary: List tenant quarantined chunks
+      security: [{ApiKey: [admin]}, {BffSession: [admin]}]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: document_id
+          in: query
+          schema: {type: string, maxLength: 80}
+      responses:
+        '200':
+          description: Quarantine page, plain text only.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/QuarantinePage'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/Validation'}
+  /v1/admin/quarantine/{chunk_id}:
+    get:
+      tags: [Admin]
+      operationId: getQuarantineItem
+      summary: Read one quarantined chunk as escaped plain text
+      security: [{ApiKey: [admin]}, {BffSession: [admin]}]
+      parameters:
+        - name: chunk_id
+          in: path
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 80}
+      responses:
+        '200':
+          description: Quarantine item.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/QuarantineItem'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      tags: [Admin]
+      operationId: decideQuarantine
+      summary: Approve or reject quarantined chunk
+      security: [{ApiKey: [admin]}, {BffSession: [admin]}]
+      parameters:
+        - name: chunk_id
+          in: path
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 80}
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/QuarantineDecisionInput'}
+            example: {decision: reject, reason: Contains instruction-like content}
+      responses:
+        '200':
+          description: Decision recorded.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/QuarantineDecision'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Validation'}
+  /v1/admin/usage:
+    get:
+      tags: [Admin]
+      operationId: getUsage
+      summary: Get tenant usage and estimated cost over a bounded date range
+      security: [{ApiKey: [admin]}, {BffSession: [admin]}]
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: {type: string, format: date-time}
+        - name: to
+          in: query
+          required: true
+          schema: {type: string, format: date-time}
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Usage summary; cost may be an estimate.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UsageSummary'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/Validation'}
+  /v1/admin/api-keys:
+    get:
+      tags: [Admin]
+      operationId: listApiKeys
+      summary: List API key metadata, never secret values
+      security: [{ApiKey: [admin]}, {BffSession: [admin]}]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: API key page.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiKeyPage'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [Admin]
+      operationId: createApiKey
+      summary: Issue an API key; plaintext returned once
+      security: [{ApiKey: [admin]}, {BffSession: [admin]}]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ApiKeyInput'}
+            example: {name: reporting integration, scopes: [read]}
+      responses:
+        '201':
+          description: Created; secret field is shown once and not persisted in recoverable form.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiKeyCreated'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Validation'}
+  /v1/admin/api-keys/{key_id}:
+    delete:
+      tags: [Admin]
+      operationId: revokeApiKey
+      summary: Revoke tenant API key
+      security: [{ApiKey: [admin]}, {BffSession: [admin]}]
+      parameters:
+        - name: key_id
+          in: path
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 80}
+      responses:
+        '204': {description: Revoked.}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /v1/admin/status:
+    get:
+      tags: [Admin]
+      operationId: getAdminStatus
+      summary: Tenant-safe operational status summary
+      security: [{ApiKey: [admin]}, {BffSession: [admin]}]
+      responses:
+        '200':
+          description: Tenant-safe status; no infrastructure secrets or hostnames.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminStatus'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /healthz:
+    get:
+      tags: [Operations]
+      operationId: liveness
+      summary: Process liveness probe
+      security: []
+      responses:
+        '200':
+          description: Process is alive.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Health'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /readyz:
+    get:
+      tags: [Operations]
+      operationId: readiness
+      summary: Readiness probe for required dependencies
+      security: []
+      responses:
+        '200':
+          description: Ready.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Readiness'}
+        '503':
+          description: One or more required dependencies unavailable.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Readiness'}
+  /metrics:
+    get:
+      tags: [Operations]
+      operationId: metrics
+      summary: Private Prometheus metrics endpoint
+      security:
+        - ScrapeToken: []
+      responses:
+        '200':
+          description: Prometheus exposition; not publicly routable.
+          content:
+            text/plain:
+              schema: {type: string}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /v1/version:
+    get:
+      tags: [Operations]
+      operationId: version
+      summary: Runtime release metadata
+      security: [{ApiKey: [read]}, {BffSession: [viewer]}]
+      responses:
+        '200':
+          description: Version metadata.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Version'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+components:
+  securitySchemes:
+    ApiKey:
+      type: http
+      scheme: bearer
+      bearerFormat: tenant API key
+      description: Machine credential; server derives tenant and validates scopes.
+    BffSession:
+      type: apiKey
+      in: cookie
+      name: __Host-rag_session
+      description: Secure HttpOnly same-origin BFF session; mutation requests also require CSRF/origin checks.
+    ScrapeToken:
+      type: http
+      scheme: bearer
+      description: Internal scraper credential; network isolation is also required.
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Proposed 24-hour tenant/route/request-digest idempotency window.
+      schema: {type: string, minLength: 32, maxLength: 128, pattern: '^[!-~]+$'}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: {type: string, maxLength: 512}
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: false
+      schema: {type: string, maxLength: 128}
+    RequestId:
+      name: X-Request-ID
+      in: header
+      required: false
+      schema: {type: string, maxLength: 128}
+    DocumentId:
+      name: document_id
+      in: path
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 80}
+  headers:
+    RequestId:
+      description: Correlation identifier for this response.
+      schema: {type: string, maxLength: 128}
+    RetryAfter:
+      description: Seconds before retry is advised.
+      schema: {type: integer, minimum: 1}
+  responses:
+    BadRequest:
+      description: Malformed request.
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+    Unauthorized:
+      description: Authentication required or invalid.
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+    Forbidden:
+      description: Authenticated identity lacks permission.
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+    NotFound:
+      description: Resource not found or not visible to this tenant.
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+    Conflict:
+      description: State or idempotency conflict.
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+    TooLarge:
+      description: Request exceeds configured limit.
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+    UnsupportedMedia:
+      description: Unsupported or invalid file content.
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+    Validation:
+      description: Input validation failed.
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+    RateLimited:
+      description: Rate or quota limit reached.
+      headers:
+        Retry-After: {$ref: '#/components/headers/RetryAfter'}
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+    Unavailable:
+      description: Required dependency unavailable or request timed out.
+      headers:
+        Retry-After: {$ref: '#/components/headers/RetryAfter'}
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status, code, request_id]
+      properties:
+        type: {type: string, format: uri-reference}
+        title: {type: string}
+        status: {type: integer, minimum: 400, maximum: 599}
+        detail: {type: string, maxLength: 1000}
+        instance: {type: string, format: uri-reference}
+        code:
+          type: string
+          enum: [authentication_required, permission_denied, not_found, validation_failed, conflict, idempotency_conflict, payload_too_large, unsupported_media_type, rate_limited, quota_exceeded, dependency_unavailable, provider_timeout, job_not_retryable, internal_error]
+        request_id: {type: string}
+        field_errors:
+          type: array
+          items:
+            type: object
+            required: [field, code]
+            properties:
+              field: {type: string}
+              code: {type: string}
+              message: {type: string}
+      additionalProperties: false
+    PageInfo:
+      type: object
+      required: [has_more]
+      properties:
+        next_cursor: {type: [string, 'null'], maxLength: 512}
+        has_more: {type: boolean}
+      additionalProperties: false
+    DocumentStatus:
+      type: string
+      enum: [queued, processing, ready, failed, deleting, deleted]
+    JobStatus:
+      type: string
+      enum: [queued, processing, ready, failed, cancelled]
+    Document:
+      type: object
+      required: [id, collection_id, filename, media_type, size_bytes, status, created_at]
+      properties:
+        id: {type: string}
+        collection_id: {type: string}
+        filename: {type: string, maxLength: 255}
+        media_type: {const: application/pdf}
+        size_bytes: {type: integer, minimum: 0}
+        status: {$ref: '#/components/schemas/DocumentStatus'}
+        page_count: {type: [integer, 'null'], minimum: 0}
+        metadata: {type: object, additionalProperties: {type: [string, number, boolean, 'null']}}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: [string, 'null'], format: date-time}
+        error_code: {type: [string, 'null']}
+      additionalProperties: false
+    Job:
+      type: object
+      required: [id, status, progress, created_at]
+      properties:
+        id: {type: string}
+        status: {$ref: '#/components/schemas/JobStatus'}
+        progress: {type: integer, minimum: 0, maximum: 100}
+        stage: {type: [string, 'null'], maxLength: 80}
+        retryable: {type: boolean, default: false}
+        error_code: {type: [string, 'null']}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+      additionalProperties: false
+    DocumentJob:
+      type: object
+      required: [document, job, request_id]
+      properties:
+        document: {$ref: '#/components/schemas/Document'}
+        job: {$ref: '#/components/schemas/Job'}
+        request_id: {type: string}
+      additionalProperties: false
+    DeleteOperation:
+      type: object
+      required: [operation_id, status, request_id]
+      properties:
+        operation_id: {type: string}
+        job_id: {type: string}
+        status: {type: string, enum: [accepted, processing, completed, failed]}
+        request_id: {type: string}
+      additionalProperties: false
+    DocumentPage:
+      type: object
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Document'}}
+        page: {$ref: '#/components/schemas/PageInfo'}
+      additionalProperties: false
+    CollectionInput:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 120}
+        description: {type: [string, 'null'], maxLength: 1000}
+      additionalProperties: false
+    CollectionPatch:
+      type: object
+      minProperties: 1
+      properties:
+        name: {type: string, minLength: 1, maxLength: 120}
+        description: {type: [string, 'null'], maxLength: 1000}
+      additionalProperties: false
+    Collection:
+      type: object
+      required: [id, name, document_count, created_at, updated_at]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        description: {type: [string, 'null']}
+        document_count: {type: integer, minimum: 0}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+      additionalProperties: false
+    CollectionPage:
+      type: object
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Collection'}}
+        page: {$ref: '#/components/schemas/PageInfo'}
+      additionalProperties: false
+    QueryInput:
+      type: object
+      required: [question, collection_ids]
+      properties:
+        question: {type: string, minLength: 1, maxLength: 8000}
+        collection_ids:
+          type: array
+          minItems: 1
+          maxItems: 3
+          uniqueItems: true
+          items: {type: string, maxLength: 80}
+        conversation_id: {type: [string, 'null'], maxLength: 80}
+        stream: {type: boolean, default: false}
+        top_k: {type: integer, minimum: 1, maximum: 20, default: 8}
+        filters: {type: object, maxProperties: 10, additionalProperties: {type: [string, number, boolean]}}
+        debug: {type: boolean, default: false, description: 'Honored only for an authorized admin identity.'}
+      additionalProperties: false
+    Citation:
+      type: object
+      required: [chunk_id, document_id, filename, quote]
+      properties:
+        chunk_id: {type: string}
+        document_id: {type: string}
+        filename: {type: string}
+        page: {type: [integer, 'null'], minimum: 1}
+        section: {type: [string, 'null'], maxLength: 300}
+        quote: {type: string, maxLength: 2000}
+      additionalProperties: false
+    Usage:
+      type: object
+      required: [input_tokens, output_tokens]
+      properties:
+        input_tokens: {type: integer, minimum: 0}
+        output_tokens: {type: integer, minimum: 0}
+        estimated_cost_usd: {type: [number, 'null'], minimum: 0}
+      additionalProperties: false
+    QueryResult:
+      type: object
+      required: [answer, citations, refusal, usage, request_id]
+      properties:
+        answer: {type: string}
+        citations: {type: array, items: {$ref: '#/components/schemas/Citation'}, maxItems: 20}
+        refusal: {type: [object, 'null'], properties: {code: {type: string}, message: {type: string}}}
+        usage: {$ref: '#/components/schemas/Usage'}
+        request_id: {type: string}
+        retrieval_debug: {type: [object, 'null'], description: Admin-only; omitted for non-admin callers.}
+      additionalProperties: false
+    ConversationInput:
+      type: object
+      properties:
+        title: {type: [string, 'null'], maxLength: 160}
+        collection_ids: {type: array, minItems: 1, maxItems: 3, uniqueItems: true, items: {type: string}}
+      additionalProperties: false
+    ConversationPatch:
+      type: object
+      minProperties: 1
+      properties:
+        title: {type: [string, 'null'], maxLength: 160}
+        pinned: {type: boolean}
+      additionalProperties: false
+    Conversation:
+      type: object
+      required: [id, title, collection_ids, pinned, created_at, updated_at]
+      properties:
+        id: {type: string}
+        title: {type: [string, 'null']}
+        collection_ids: {type: array, items: {type: string}}
+        pinned: {type: boolean}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+      additionalProperties: false
+    ConversationPage:
+      type: object
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Conversation'}}
+        page: {$ref: '#/components/schemas/PageInfo'}
+      additionalProperties: false
+    Message:
+      type: object
+      required: [id, role, content, citations, created_at]
+      properties:
+        id: {type: string}
+        role: {type: string, enum: [user, assistant]}
+        content: {type: string, maxLength: 40000}
+        citations: {type: array, items: {$ref: '#/components/schemas/Citation'}}
+        request_id: {type: [string, 'null']}
+        created_at: {type: string, format: date-time}
+      additionalProperties: false
+    MessagePage:
+      type: object
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Message'}}
+        page: {$ref: '#/components/schemas/PageInfo'}
+      additionalProperties: false
+    FeedbackInput:
+      type: object
+      required: [request_id, rating]
+      properties:
+        request_id: {type: string, maxLength: 128}
+        rating: {type: string, enum: [up, down]}
+        reason: {type: [string, 'null'], maxLength: 1000}
+      additionalProperties: false
+    Feedback:
+      type: object
+      required: [id, request_id, rating, created_at]
+      properties:
+        id: {type: string}
+        request_id: {type: string}
+        rating: {type: string, enum: [up, down]}
+        created_at: {type: string, format: date-time}
+      additionalProperties: false
+    QuarantineItem:
+      type: object
+      required: [chunk_id, document_id, plain_text, reason_codes, created_at]
+      properties:
+        chunk_id: {type: string}
+        document_id: {type: string}
+        page: {type: [integer, 'null'], minimum: 1}
+        plain_text: {type: string, maxLength: 12000, description: Never render as HTML.}
+        reason_codes: {type: array, items: {type: string}}
+        created_at: {type: string, format: date-time}
+      additionalProperties: false
+    QuarantinePage:
+      type: object
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/QuarantineItem'}}
+        page: {$ref: '#/components/schemas/PageInfo'}
+      additionalProperties: false
+    QuarantineDecisionInput:
+      type: object
+      required: [decision, reason]
+      properties:
+        decision: {type: string, enum: [approve, reject]}
+        reason: {type: string, minLength: 1, maxLength: 1000}
+      additionalProperties: false
+    QuarantineDecision:
+      type: object
+      required: [chunk_id, decision, decided_at, request_id]
+      properties:
+        chunk_id: {type: string}
+        decision: {type: string, enum: [approve, reject]}
+        decided_at: {type: string, format: date-time}
+        request_id: {type: string}
+      additionalProperties: false
+    UsageSummary:
+      type: object
+      required: [from, to, query_count, input_tokens, output_tokens, estimated_cost_usd]
+      properties:
+        from: {type: string, format: date-time}
+        to: {type: string, format: date-time}
+        query_count: {type: integer, minimum: 0}
+        input_tokens: {type: integer, minimum: 0}
+        output_tokens: {type: integer, minimum: 0}
+        estimated_cost_usd: {type: number, minimum: 0, description: Estimate; reconciliation source disclosed by implementation.}
+        by_model: {type: array, items: {type: object, required: [model, request_count, estimated_cost_usd], properties: {model: {type: string}, request_count: {type: integer}, estimated_cost_usd: {type: number}}}}
+      additionalProperties: false
+    ApiKeyInput:
+      type: object
+      required: [name, scopes]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 120}
+        scopes: {type: array, minItems: 1, uniqueItems: true, items: {type: string, enum: [read, write, admin]}}
+        expires_at: {type: [string, 'null'], format: date-time}
+      additionalProperties: false
+    ApiKey:
+      type: object
+      required: [id, name, scopes, created_at, revoked]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        scopes: {type: array, items: {type: string}}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: [string, 'null'], format: date-time}
+        last_used_at: {type: [string, 'null'], format: date-time}
+        revoked: {type: boolean}
+      additionalProperties: false
+    ApiKeyCreated:
+      type: object
+      required: [key, secret]
+      properties:
+        key: {$ref: '#/components/schemas/ApiKey'}
+        secret: {type: string, writeOnly: true, description: Returned only once; never logged or stored recoverably.}
+      additionalProperties: false
+    ApiKeyPage:
+      type: object
+      required: [items, page]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ApiKey'}}
+        page: {$ref: '#/components/schemas/PageInfo'}
+      additionalProperties: false
+    AdminStatus:
+      type: object
+      required: [api, database, queue, generated_at]
+      properties:
+        api: {type: string, enum: [healthy, degraded, unavailable]}
+        database: {type: string, enum: [healthy, degraded, unavailable]}
+        queue: {type: string, enum: [healthy, degraded, unavailable]}
+        generated_at: {type: string, format: date-time}
+      additionalProperties: false
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status: {const: ok}
+      additionalProperties: false
+    Readiness:
+      type: object
+      required: [status, checks]
+      properties:
+        status: {type: string, enum: [ready, not_ready]}
+        checks: {type: object, additionalProperties: {type: string, enum: [ok, failed, skipped]}}
+      additionalProperties: false
+    Version:
+      type: object
+      required: [version, api_contract]
+      properties:
+        version: {type: string, maxLength: 80}
+        api_contract: {type: string, const: '1.0.0-draft'}
+      additionalProperties: false
