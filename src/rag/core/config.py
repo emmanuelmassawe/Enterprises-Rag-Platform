@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     app_env: Literal["development", "test", "staging", "production"] = "development"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     metrics_scrape_token: SecretStr | None = None
+
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def normalize_log_level(cls, value: object) -> object:
+        """Accept lowercase env values while preserving strict supported levels."""
+        return value.upper() if isinstance(value, str) else value
+
     @field_validator("metrics_scrape_token", mode="before")
     @classmethod
     def validate_metrics_token(cls, token: object) -> object:
@@ -37,4 +44,3 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Cache settings so the application uses one validated configuration snapshot."""
     return Settings()
-

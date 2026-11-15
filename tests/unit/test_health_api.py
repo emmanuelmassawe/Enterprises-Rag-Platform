@@ -1,8 +1,8 @@
 """Behavior tests for the initial operational HTTP contract."""
 
+import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
-import pytest
 
 from rag.api.main import create_app
 from rag.core.config import Settings
@@ -43,11 +43,12 @@ def test_unmatched_route_uses_problem_details() -> None:
 
 def test_metrics_route_requires_bearer_secret() -> None:
     """Metrics stay protected even when a local caller reaches the route."""
-    settings = Settings(app_env="test", metrics_scrape_token="a" * 32)
+    metrics_token = "synthetic-test-token-".ljust(32, "x")
+    settings = Settings(app_env="test", metrics_scrape_token=metrics_token)
     client = TestClient(create_app(settings))
 
     denied = client.get("/metrics")
-    allowed = client.get("/metrics", headers={"Authorization": f"Bearer {'a' * 32}"})
+    allowed = client.get("/metrics", headers={"Authorization": f"Bearer {metrics_token}"})
 
     assert denied.status_code == 403
     assert allowed.status_code == 200
@@ -57,15 +58,14 @@ def test_metrics_route_requires_bearer_secret() -> None:
 def test_metrics_token_must_be_strong() -> None:
     """Reject weak scrape credentials during settings validation."""
     with pytest.raises(ValidationError):
-        Settings(metrics_scrape_token="short")
+        Settings(metrics_scrape_token="test-only")  # noqa: S106 - intentionally invalid test input
 
 
 def test_metrics_route_is_disabled_when_token_is_empty() -> None:
     """An empty local env value must not expose metrics or prevent startup."""
     client = TestClient(create_app(Settings(app_env="test", metrics_scrape_token="")))
 
-    response = client.get("/metrics", headers={"Authorization": f"Bearer {'a' * 40}"})
+    test_token = "synthetic-disabled-metrics-token-123456"
+    response = client.get("/metrics", headers={"Authorization": f"Bearer {test_token}"})
 
     assert response.status_code == 403
-
-

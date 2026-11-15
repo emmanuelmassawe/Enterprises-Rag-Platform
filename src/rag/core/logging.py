@@ -20,4 +20,3 @@ def configure_logging(level: str) -> None:
         logger_factory=structlog.PrintLoggerFactory(),
         cache_logger_on_first_use=True,
     )
-
