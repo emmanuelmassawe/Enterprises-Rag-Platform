@@ -1,0 +1,78 @@
+[project]
+name = "enterprise-rag-platform"
+version = "0.1.0"
+description = "A multi-tenant, evidence-grounded retrieval platform."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi>=0.115,<1.0",
+  "prometheus-client>=0.21,<1.0",
+  "pydantic-settings>=2.7,<3.0",
+  "structlog>=24.4,<26.0",
+  "uvicorn[standard]>=0.34,<1.0",
+]
+
+[dependency-groups]
+dev = [
+  "coverage[toml]>=7.6,<8.0",
+  "httpx>=0.28,<1.0",
+  "import-linter>=2.1,<3.0",
+  "mypy>=1.14,<2.0",
+  "pytest>=8.3,<9.0",
+  "pytest-asyncio>=0.25,<2.0",
+  "ruff>=0.9,<1.0",
+]
+
+[build-system]
+requires = ["hatchling>=1.27,<2.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rag"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "--strict-markers --strict-config"
+
+[tool.coverage.run]
+branch = true
+source = ["rag"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "C4", "C90", "SIM", "S", "T20"]
+ignore = ["S104"]
+mccabe.max-complexity = 10
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "src"
+packages = ["rag"]
+plugins = ["pydantic.mypy"]
+warn_unreachable = true
+
+[tool.importlinter]
+root_package = "rag"
+
+[[tool.importlinter.contracts]]
+name = "Domain does not depend on outer layers"
+type = "forbidden"
+source_modules = ["rag.domain"]
+forbidden_modules = ["rag.api", "rag.adapters", "rag.services", "rag.workers"]
+
+[[tool.importlinter.contracts]]
+name = "API does not depend on adapters or services"
+type = "forbidden"
+source_modules = ["rag.api"]
+forbidden_modules = ["rag.adapters", "rag.services", "rag.workers"]
+
