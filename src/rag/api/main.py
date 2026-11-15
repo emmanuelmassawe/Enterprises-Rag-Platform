@@ -3,7 +3,6 @@
 import hmac
 import re
 import time
-from collections.abc import Callable
 from contextlib import asynccontextmanager
 from typing import Any
 from uuid import uuid4
