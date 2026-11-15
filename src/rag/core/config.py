@@ -22,21 +22,13 @@ class Settings(BaseSettings):
     app_env: Literal["development", "test", "staging", "production"] = "development"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     metrics_scrape_token: SecretStr | None = None
-
-    @field_validator("log_level", mode="before")
-    @classmethod
-    def normalize_log_level(cls, value: object) -> object:
-        """Accept lowercase env values while preserving strict supported levels."""
-        return value.upper() if isinstance(value, str) else value
-
     @field_validator("metrics_scrape_token", mode="before")
     @classmethod
     def validate_metrics_token(cls, token: object) -> object:
         """Require a strong scrape token when the protected metrics route is enabled."""
         if token == "":
             return None
-        value = token.get_secret_value() if isinstance(token, SecretStr) else token
-        if isinstance(value, str) and len(value) < 32:
+        if isinstance(token, SecretStr) and len(token.get_secret_value()) < 32:
             raise ValueError("METRICS_SCRAPE_TOKEN must contain at least 32 characters")
         return token
 

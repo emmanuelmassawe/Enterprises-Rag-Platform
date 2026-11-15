@@ -20,11 +20,7 @@ from rag.core.logging import configure_logging
 
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 REQUESTS = Counter("rag_http_requests_total", "HTTP requests", ["method", "route", "status"])
-REQUEST_DURATION = Histogram(
-    "rag_http_request_duration_seconds",
-    "HTTP request duration",
-    ["method", "route"],
-)
+REQUEST_DURATION = Histogram("rag_http_request_duration_seconds", "HTTP request duration", ["method", "route"])
 
 
 def _request_id(request: Request) -> str:
@@ -80,60 +76,6 @@ def _problem(request: Request, status: int, code: str, title: str, detail: str) 
     )
 
 
-def _register_error_handlers(app: FastAPI) -> None:
-    """Map transport and validation failures to stable, non-disclosing problems."""
-
-    @app.exception_handler(RequestValidationError)
-    async def validation_error_handler(request: Request, _: RequestValidationError) -> JSONResponse:
-        return _problem(
-            request,
-            422,
-            "validation_failed",
-            "Validation failed",
-            "Request validation failed.",
-        )
-
-    @app.exception_handler(StarletteHTTPException)
-    async def http_error_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
-        if exc.status_code == 404:
-            return _problem(
-                request,
-                404,
-                "not_found",
-                "Not found",
-                "The requested resource was not found.",
-            )
-        if exc.status_code == 405:
-            return _problem(
-                request,
-                405,
-                "method_not_allowed",
-                "Method not allowed",
-                "The method is not supported.",
-            )
-        return _problem(
-            request,
-            exc.status_code,
-            "http_error",
-            "Request failed",
-            "The request could not be completed.",
-        )
-
-    @app.exception_handler(Exception)
-    async def unhandled_error_handler(request: Request, _: Exception) -> JSONResponse:
-        structlog.get_logger("application").exception(
-            "unhandled_application_error",
-            request_id=getattr(request.state, "request_id", "unknown"),
-        )
-        return _problem(
-            request,
-            500,
-            "internal_error",
-            "Internal server error",
-            "The request could not be completed.",
-        )
-
-
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Create an app instance, allowing isolated settings in tests and deployments."""
     resolved = settings or get_settings()
@@ -152,7 +94,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.add_middleware(RequestContextMiddleware)
-    _register_error_handlers(app)
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error_handler(request: Request, _: RequestValidationError) -> JSONResponse:
+        return _problem(request, 422, "validation_failed", "Validation failed", "Request validation failed.")
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+        if exc.status_code == 404:
+            return _problem(request, 404, "not_found", "Not found", "The requested resource was not found.")
+        if exc.status_code == 405:
+            return _problem(request, 405, "method_not_allowed", "Method not allowed", "The method is not supported.")
+        return _problem(request, exc.status_code, "http_error", "Request failed", "The request could not be completed.")
+
+    @app.exception_handler(Exception)
+    async def unhandled_error_handler(request: Request, _: Exception) -> JSONResponse:
+        structlog.get_logger("application").exception(
+            "unhandled_application_error",
+            request_id=getattr(request.state, "request_id", "unknown"),
+        )
+        return _problem(request, 500, "internal_error", "Internal server error", "The request could not be completed.")
 
     @app.get("/healthz", tags=["Operations"], include_in_schema=False)
     async def healthz() -> dict[str, str]:
@@ -171,13 +132,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         authorization = request.headers.get("authorization", "")
         supplied = authorization.removeprefix("Bearer ")
         if token is None or not hmac.compare_digest(supplied, token.get_secret_value()):
-            return _problem(
-                request,
-                403,
-                "permission_denied",
-                "Forbidden",
-                "Metrics access is not authorized.",
-            )
+            return _problem(request, 403, "permission_denied", "Forbidden", "Metrics access is not authorized.")
         return PlainTextResponse(generate_latest().decode("utf-8"), media_type=CONTENT_TYPE_LATEST)
 
     return app
