@@ -11,6 +11,8 @@ from uuid import UUID, uuid4
 from rag.domain.auth import (
     ApiKeyCredentials,
     ApiKeyRecord,
+    InvalidCredential,
+    InvalidKeyGrant,
     Principal,
     Scope,
     role_for_scopes,
@@ -18,14 +20,6 @@ from rag.domain.auth import (
 from rag.domain.ports.api_keys import ApiKeyStore
 
 API_KEY_FORMAT_PREFIX = "rag"
-
-
-class InvalidCredential(ValueError):
-    """Bearer token is malformed, unknown, expired, revoked, or incorrect."""
-
-
-class InvalidKeyGrant(ValueError):
-    """Requested key scopes exceed the caller's authority or input is invalid."""
 
 
 def parse_token(token: str) -> ApiKeyCredentials:

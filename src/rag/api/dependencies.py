@@ -3,25 +3,25 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import Depends, Request
 
 from rag.core.errors import ProblemException
-from rag.domain.auth import Principal, Scope
-from rag.services.api_keys import ApiKeyService, InvalidCredential
+from rag.domain.auth import InvalidCredential, Principal, Scope
+from rag.domain.ports.api_keys import ApiKeyApplication
 
 
-def _key_service(request: Request) -> ApiKeyService:
+def _key_service(request: Request) -> ApiKeyApplication:
     service = getattr(request.app.state, "api_key_service", None)
-    if not isinstance(service, ApiKeyService):
+    if service is None:
         raise ProblemException(
             503,
             "dependency_unavailable",
             "Service unavailable",
             "Credential storage is unavailable.",
         )
-    return service
+    return cast(ApiKeyApplication, service)
 
 
 async def current_principal(request: Request) -> Principal:
@@ -47,7 +47,15 @@ async def current_principal(request: Request) -> Principal:
             "A valid bearer API key is required.",
             {"WWW-Authenticate": "Bearer"},
         ) from exc
-    decision = await request.app.state.rate_limiter.consume(
+    limiter = request.app.state.rate_limiter
+    if limiter is None:
+        raise ProblemException(
+            503,
+            "dependency_unavailable",
+            "Service unavailable",
+            "Rate limiting is unavailable.",
+        )
+    decision = await limiter.consume(
         str(principal.tenant_id),
         str(principal.key_id),
         request.app.state.settings.rate_limit_requests,

@@ -5,6 +5,7 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1
 WORKDIR /build
 COPY pyproject.toml README.md ./
+COPY alembic.ini ./
 COPY src ./src
 RUN python -m pip install --upgrade pip && python -m pip wheel --wheel-dir /wheels .
 
@@ -23,5 +24,5 @@ USER app
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD python -c "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/healthz', timeout=2)"
-CMD ["uvicorn", "rag.api.main:app", "--app-dir", "src", "--host", "0.0.0.0", "--port", "8000", "--no-server-header"]
+CMD ["uvicorn", "rag.composition:app", "--app-dir", "src", "--host", "0.0.0.0", "--port", "8000", "--no-server-header"]
 

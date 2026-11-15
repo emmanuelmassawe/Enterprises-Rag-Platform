@@ -4,7 +4,7 @@ setup:
 	uv sync --all-groups
 
 dev:
-	uv run uvicorn rag.api.main:app --app-dir src --host 127.0.0.1 --port 8000 --reload
+uv run uvicorn rag.composition:app --app-dir src --host 127.0.0.1 --port 8000 --reload
 
 test:
 	uv run coverage run -m pytest
@@ -24,8 +24,11 @@ smoke:
 security-audit:
 	uv run pip-audit --skip-editable
 
+migrate:
+	uv run alembic upgrade head
+
 # These targets are activated in the milestones that introduce their tools and data.
-migrate eval redteam load-test tf-plan tf-apply:
+eval redteam load-test tf-plan tf-apply:
 	@echo "$@ is not available yet; it will be enabled in the milestone that introduces it."
 	@exit 2
 

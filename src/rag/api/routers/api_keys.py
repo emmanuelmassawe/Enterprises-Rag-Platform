@@ -11,8 +11,14 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from rag.api.dependencies import _key_service, require_scope
 from rag.core.errors import ProblemException
-from rag.domain.auth import ApiKeyRecord, IdempotencyConflict, Principal, Scope
-from rag.services.api_keys import ApiKeyService, InvalidKeyGrant
+from rag.domain.auth import (
+    ApiKeyRecord,
+    IdempotencyConflict,
+    InvalidKeyGrant,
+    Principal,
+    Scope,
+)
+from rag.domain.ports.api_keys import ApiKeyApplication
 
 router = APIRouter(prefix="/v1/admin/api-keys", tags=["Admin"])
 AdminPrincipal = Annotated[Principal, Depends(require_scope(Scope.ADMIN))]
@@ -154,7 +160,7 @@ async def revoke_api_key(
     principal: AdminPrincipal,
 ) -> Response:
     """Revoke only a key owned by the authenticated tenant; repeated calls are safe."""
-    service: ApiKeyService = _key_service(request)
+    service: ApiKeyApplication = _key_service(request)
     found = await service.revoke(principal.tenant_id, key_id)
     if not found:
         raise ProblemException(404, "not_found", "Not found", "API key was not found.")

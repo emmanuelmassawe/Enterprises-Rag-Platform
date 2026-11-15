@@ -28,6 +28,14 @@ class IdempotencyConflict(ValueError):
     """An idempotency key has been used already and cannot issue a second secret."""
 
 
+class InvalidCredential(ValueError):
+    """Bearer token is malformed, unknown, expired, revoked, or incorrect."""
+
+
+class InvalidKeyGrant(ValueError):
+    """Requested key scopes exceed the caller's authority or input is invalid."""
+
+
 @dataclass(frozen=True, slots=True)
 class Principal:
     """Authenticated, tenant-bound caller context."""

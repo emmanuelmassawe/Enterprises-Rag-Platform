@@ -1,6 +1,6 @@
 # Enterprise RAG Platform
 
-Design-approved foundation for a multi-tenant document question-answering service. Current milestone provides the API process, validated runtime configuration, structured request logging, protected metrics, health routes, and local container workflow. Knowledge ingestion, persistence, authentication, and the web UI arrive in later approved milestones.
+Foundation for a multi-tenant document question-answering service. The current implementation provides the API process, PostgreSQL schema with tenant RLS, hashed API-key authentication, Redis-backed rate limiting, protected metrics, health routes, and local container workflow. Knowledge ingestion and the web UI arrive in later milestones.
 
 ## Contents
 
@@ -26,7 +26,7 @@ flowchart LR
   API --> Metrics[Protected /metrics]
 ```
 
-The API follows a hexagonal package layout under `src/rag`: transport in `api`, validated settings and logging in `core`, and reserved package boundaries for domain, services, adapters and workers. Domain/application code will be introduced with the milestone that owns its behavior.
+The API follows a hexagonal package layout under `src/rag`: transport in `api`, validated settings and logging in `core`, application composition in `composition.py`, persistence and Redis adapters, and tenant/auth policies in domain and services.
 
 ## Quickstart
 
@@ -34,10 +34,12 @@ Prerequisites: Python 3.12 and [uv](https://docs.astral.sh/uv/); Docker Engine w
 
 ```powershell
 uv sync --all-groups
-uv run uvicorn rag.api.main:app --app-dir src --host 127.0.0.1 --port 8000 --reload
+docker compose up -d db state
+make migrate
+uv run uvicorn rag.composition:app --app-dir src --host 127.0.0.1 --port 8000 --reload
 ```
 
-In another terminal, `make smoke` checks liveness and readiness. Or run `docker compose up --build` and open `http://127.0.0.1:8000/healthz`. `/metrics` returns 403 until `METRICS_SCRAPE_TOKEN` is set to a random value of at least 32 characters and supplied as a Bearer token.
+In another terminal, `make smoke` checks liveness and readiness. Or run `docker compose up --build` and open `http://127.0.0.1:8000/healthz`. `/metrics` returns 403 until `METRICS_SCRAPE_TOKEN` is set to a random value of at least 32 characters and supplied as a Bearer token. Local Postgres uses trust authentication only on an unexposed internal Compose network; production must use managed credentials and separate runtime/migration roles.
 
 ## Configuration
 
@@ -47,15 +49,18 @@ In another terminal, `make smoke` checks liveness and readiness. Or run `docker 
 | `APP_ENV` | `development` | Environment: development, test, staging, production. |
 | `LOG_LEVEL` | `INFO` | Minimum structured log level. |
 | `METRICS_SCRAPE_TOKEN` | unset | Strong bearer secret required for `/metrics`; unset denies access. |
+| `DATABASE_URL` | Compose local runtime URL | Runtime Postgres connection using a non-owner role. |
+| `MIGRATION_DATABASE_URL` | Compose local migration URL | Privileged one-off migration connection; never used by API request handling. |
+| `REDIS_URL` | Compose local `state` URL | Redis control-state connection for distributed rate limits. |
 Copy `.env.example` to `.env` for local changes. Never commit `.env`.
 
 ## Tooling
 
-`make setup`, `make dev`, `make test`, `make lint`, `make typecheck`, and `make smoke` are active. Coverage gate is 80%. `migrate`, `eval`, `redteam`, `load-test`, and Terraform targets deliberately fail with an explanatory message until their milestones add the required systems. CI runs lint, strict typing, tests, secret scan, and a container build. GitHub Actions use pinned commit SHAs and minimal permissions.
+`make setup`, `make dev`, `make test`, `make lint`, `make typecheck`, `make migrate`, `make smoke`, and `make security-audit` are active. Coverage gate is 80%. `eval`, `redteam`, `load-test`, and Terraform targets remain unavailable until their milestones. CI runs lint, strict typing, tests, secret scan, dependency audit, and a container build. GitHub Actions use pinned commit SHAs and minimal permissions.
 
 ## Security and operations
 
-The metrics endpoint is token-protected and should also be network-restricted by deployment configuration. Request IDs are bounded to a safe character set or regenerated. Logs omit request bodies, query strings, credentials and user identifiers. The M1 readiness route checks only the API process because DB, queue and blob adapters are not introduced yet; M2+ must add dependency checks before declaring full readiness.
+The metrics endpoint is token-protected and should also be network-restricted by deployment configuration. Request IDs are bounded to a safe character set or regenerated. Logs omit request bodies, query strings, credentials and user identifiers. Liveness checks only the process. Readiness checks Postgres and the shared rate-limit store; a local in-process fallback is reported as not ready because it cannot enforce a cross-replica limit.
 
 The container runs as non-root, drops Linux capabilities in Compose, uses a read-only root filesystem, and has a liveness health check. The Python base image is pinned by version tag pending a verified immutable digest in a later hardening pass. See [architecture](docs/ARCHITECTURE.md) and the [decision records](docs/ADR/README.md).
 
