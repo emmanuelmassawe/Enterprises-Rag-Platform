@@ -11,8 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from rag.api.dependencies import _key_service, require_scope
 from rag.core.errors import ProblemException
-from rag.domain.auth import ApiKeyRecord, Principal, Scope
-from rag.domain.auth import IdempotencyConflict
+from rag.domain.auth import ApiKeyRecord, IdempotencyConflict, Principal, Scope
 from rag.services.api_keys import ApiKeyService, InvalidKeyGrant
 
 router = APIRouter(prefix="/v1/admin/api-keys", tags=["Admin"])
@@ -143,7 +142,7 @@ async def create_api_key(
             409,
             "idempotency_conflict",
             "Conflict",
-            "This idempotency key was already used; no additional key was created and its secret is not replayed.",
+            "This idempotency key was already used. No new key was created.",
         ) from exc
     return ApiKeyCreated(key=_public_key(record), secret=secret)
 

@@ -19,8 +19,10 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID as PGUUID
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
 
 class Base(DeclarativeBase):
     """Base metadata shared by migrations and Postgres adapters."""
@@ -116,7 +118,9 @@ class Document(TenantRow, Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="queued")
     source: Mapped[str] = mapped_column(String(32), nullable=False, server_default="upload")
-    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, server_default="{}")
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSONB, nullable=False, server_default="{}"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -160,7 +164,9 @@ class Chunk(TenantRow, Base):
     )
     page: Mapped[int | None] = mapped_column(Integer)
     section: Mapped[str | None] = mapped_column(String(500))
-    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, server_default="{}")
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSONB, nullable=False, server_default="{}"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -192,7 +198,9 @@ class Conversation(TenantRow, Base):
     __table_args__ = (UniqueConstraint("tenant_id", "id", name="uq_conversations_tenant_id_id"),)
 
     owner_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    title: Mapped[str] = mapped_column(String(240), nullable=False, server_default="New conversation")
+    title: Mapped[str] = mapped_column(
+        String(240), nullable=False, server_default="New conversation"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -207,22 +215,24 @@ class Message(TenantRow, Base):
             ["conversations.tenant_id", "conversations.id"],
             ondelete="CASCADE",
         ),
-        Index("ix_messages_tenant_conversation_created", "tenant_id", "conversation_id", "created_at"),
+        Index(
+            "ix_messages_tenant_conversation_created", "tenant_id", "conversation_id", "created_at"
+        ),
     )
 
     conversation_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     role: Mapped[str] = mapped_column(String(16), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    citations: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, server_default="[]")
+    citations: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, server_default="[]"
+    )
     request_id: Mapped[str | None] = mapped_column(String(128))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class QueryLog(TenantRow, Base):
     __tablename__ = "query_logs"
-    __table_args__ = (
-        Index("ix_query_logs_tenant_created", "tenant_id", "created_at"),
-    )
+    __table_args__ = (Index("ix_query_logs_tenant_created", "tenant_id", "created_at"),)
 
     key_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     question: Mapped[str] = mapped_column(Text, nullable=False)

@@ -5,21 +5,19 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
-from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from rag.domain.auth import (
     ApiKeyCredentials,
     ApiKeyRecord,
-    IdempotencyConflict,
     Principal,
     Scope,
     role_for_scopes,
 )
 from rag.domain.ports.api_keys import ApiKeyStore
 
-TOKEN_PREFIX = "rag"
+API_KEY_FORMAT_PREFIX = "rag"
 
 
 class InvalidCredential(ValueError):
@@ -33,7 +31,7 @@ class InvalidKeyGrant(ValueError):
 def parse_token(token: str) -> ApiKeyCredentials:
     """Parse `rag.<tenant UUID>.<key UUID>.<random secret>` without trusting it."""
     parts = token.split(".", maxsplit=3)
-    if len(parts) != 4 or parts[0] != TOKEN_PREFIX or len(parts[3]) < 32:
+    if len(parts) != 4 or parts[0] != API_KEY_FORMAT_PREFIX or len(parts[3]) < 32:
         raise InvalidCredential("invalid bearer credential")
     try:
         return ApiKeyCredentials(UUID(parts[1]), UUID(parts[2]), parts[3])
@@ -61,7 +59,9 @@ class ApiKeyService:
         if not hmac.compare_digest(supplied_digest, record.secret_hash):
             raise InvalidCredential("invalid bearer credential")
         now = datetime.now(UTC)
-        if record.revoked_at is not None or (record.expires_at is not None and record.expires_at <= now):
+        if record.revoked_at is not None or (
+            record.expires_at is not None and record.expires_at <= now
+        ):
             raise InvalidCredential("invalid bearer credential")
         await self._store.touch_last_used(record.tenant_id, record.id)
         return Principal(
@@ -102,10 +102,12 @@ class ApiKeyService:
         )
         idempotency_hash = hashlib.sha256(idempotency_key.encode("ascii")).hexdigest()
         request_digest = hashlib.sha256(
-            f"{name.strip()}\n{','.join(sorted(scope.value for scope in scopes))}\n{expires_at}".encode()
+            (
+                f"{name.strip()}\n{','.join(sorted(scope.value for scope in scopes))}\n{expires_at}"
+            ).encode()
         ).hexdigest()
         await self._store.create(record, idempotency_hash, request_digest)
-        token = f"{TOKEN_PREFIX}.{actor.tenant_id}.{key_id}.{secret}"
+        token = f"{API_KEY_FORMAT_PREFIX}.{actor.tenant_id}.{key_id}.{secret}"
         return record, token
 
     async def list_keys(
@@ -117,8 +119,3 @@ class ApiKeyService:
     async def revoke(self, tenant_id: UUID, key_id: UUID) -> bool:
         """Revoke a tenant's key; repeated revocation remains successful."""
         return await self._store.revoke(tenant_id, key_id)
-
-
-def with_last_used(record: ApiKeyRecord, last_used_at: datetime) -> ApiKeyRecord:
-    """Return an updated immutable metadata value."""
-    return replace(record, last_used_at=last_used_at)

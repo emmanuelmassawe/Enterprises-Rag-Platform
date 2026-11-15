@@ -69,10 +69,7 @@ class RedisRateLimiter:
         now = int(time.time())
         bucket = now // window_seconds
         reset_at = (bucket + 1) * window_seconds
-        key = (
-            f"rag:{self._environment}:{tenant_id}:ratelimit:{key_id}:"
-            f"{window_seconds}:{bucket}"
-        )
+        key = f"rag:{self._environment}:{tenant_id}:ratelimit:{key_id}:{window_seconds}:{bucket}"
         count_value = await self._client.eval(_INCREMENT_SCRIPT, 1, key, window_seconds + 1)
         count = int(count_value)
         return RateLimitDecision(count <= limit, limit, max(0, limit - count), reset_at)

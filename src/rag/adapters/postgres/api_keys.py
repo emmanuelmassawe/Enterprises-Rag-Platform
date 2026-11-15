@@ -92,12 +92,13 @@ class PostgresApiKeyStore(ApiKeyStore):
 
     async def revoke(self, tenant_id: UUID, key_id: UUID) -> bool:
         async with self._database.tenant_session(tenant_id) as session:
-            result = await session.execute(
+            result = await session.scalar(
                 update(ApiKey)
                 .where(ApiKey.tenant_id == tenant_id, ApiKey.id == key_id)
                 .values(revoked_at=func.coalesce(ApiKey.revoked_at, datetime.now(UTC)))
+                .returning(ApiKey.id)
             )
-            return bool(result.rowcount)
+            return result is not None
 
     async def touch_last_used(self, tenant_id: UUID, key_id: UUID) -> None:
         async with self._database.tenant_session(tenant_id) as session:

@@ -7,6 +7,7 @@ from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import pool
+from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from rag.adapters.postgres import models  # noqa: F401 - registers every mapped table
@@ -34,7 +35,7 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
-def _do_run_migrations(connection: object) -> None:
+def _do_run_migrations(connection: Connection) -> None:
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
@@ -51,9 +52,7 @@ async def _run_async_migrations() -> None:
     migration_url = settings.migration_database_url
     if migration_url is None:
         raise RuntimeError("MIGRATION_DATABASE_URL is required to run migrations")
-    config.set_main_option(
-        "sqlalchemy.url", migration_url.get_secret_value().replace("%", "%%")
-    )
+    config.set_main_option("sqlalchemy.url", migration_url.get_secret_value().replace("%", "%%"))
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",

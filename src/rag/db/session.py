@@ -7,7 +7,12 @@ from contextlib import asynccontextmanager
 from uuid import UUID
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 
 class Database:
@@ -32,18 +37,17 @@ class Database:
         self, tenant_id: UUID, principal_id: UUID | None = None
     ) -> AsyncIterator[AsyncSession]:
         """Bind tenant and principal settings locally for exactly one transaction."""
-        async with self._sessions() as session:
-            async with session.begin():
+        async with self._sessions() as session, session.begin():
+            await session.execute(
+                text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+                {"tenant_id": str(tenant_id)},
+            )
+            if principal_id is not None:
                 await session.execute(
-                    text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
-                    {"tenant_id": str(tenant_id)},
+                    text("SELECT set_config('app.principal_id', :principal_id, true)"),
+                    {"principal_id": str(principal_id)},
                 )
-                if principal_id is not None:
-                    await session.execute(
-                        text("SELECT set_config('app.principal_id', :principal_id, true)"),
-                        {"principal_id": str(principal_id)},
-                    )
-                yield session
+            yield session
 
     async def ping(self) -> bool:
         """Check database connectivity with a hard timeout from the driver."""

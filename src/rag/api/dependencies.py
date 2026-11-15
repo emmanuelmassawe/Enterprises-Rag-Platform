@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import Annotated
 
 from fastapi import Depends, Request
@@ -13,9 +14,12 @@ from rag.services.api_keys import ApiKeyService, InvalidCredential
 
 def _key_service(request: Request) -> ApiKeyService:
     service = getattr(request.app.state, "api_key_service", None)
-    if service is None:
+    if not isinstance(service, ApiKeyService):
         raise ProblemException(
-            503, "dependency_unavailable", "Service unavailable", "Credential storage is unavailable."
+            503,
+            "dependency_unavailable",
+            "Service unavailable",
+            "Credential storage is unavailable.",
         )
     return service
 
@@ -62,7 +66,7 @@ async def current_principal(request: Request) -> Principal:
     return principal
 
 
-def require_scope(scope: Scope):
+def require_scope(scope: Scope) -> Callable[..., Awaitable[Principal]]:
     """Create a dependency that requires a specific API key scope."""
 
     async def check_scope(
