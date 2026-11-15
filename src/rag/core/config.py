@@ -35,7 +35,8 @@ class Settings(BaseSettings):
         """Require a strong scrape token when the protected metrics route is enabled."""
         if token == "":
             return None
-        if isinstance(token, SecretStr) and len(token.get_secret_value()) < 32:
+        value = token.get_secret_value() if isinstance(token, SecretStr) else token
+        if isinstance(value, str) and len(value) < 32:
             raise ValueError("METRICS_SCRAPE_TOKEN must contain at least 32 characters")
         return token
 

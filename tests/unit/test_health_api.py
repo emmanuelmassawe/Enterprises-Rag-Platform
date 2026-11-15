@@ -65,7 +65,7 @@ def test_metrics_route_is_disabled_when_token_is_empty() -> None:
     """An empty local env value must not expose metrics or prevent startup."""
     client = TestClient(create_app(Settings(app_env="test", metrics_scrape_token="")))
 
-    test_token = "synthetic-disabled-metrics-token-123456"
-    response = client.get("/metrics", headers={"Authorization": f"Bearer {test_token}"})
+    disabled_value = "synthetic-disabled-metrics-token-123456"
+    response = client.get("/metrics", headers={"Authorization": f"Bearer {disabled_value}"})
 
     assert response.status_code == 403
