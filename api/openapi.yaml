@@ -31,6 +31,7 @@ paths:
     post:
       tags: [Documents]
       operationId: uploadDocument
+      x-required-authorization: {api_key_scopes: [write], bff_roles: [editor]}
       summary: Upload a PDF for asynchronous ingestion
       description: One PDF per multipart request. Idempotency-Key required. Limits are configurable; proposed default max is 100 MiB.
       security:
@@ -88,6 +89,7 @@ paths:
     get:
       tags: [Documents]
       operationId: listDocuments
+      x-required-authorization: {api_key_scopes: [read], bff_roles: [viewer]}
       summary: List documents in the resolved tenant
       security:
         - ApiKey: []
@@ -120,6 +122,7 @@ paths:
     get:
       tags: [Documents]
       operationId: getDocument
+      x-required-authorization: {api_key_scopes: [read], bff_roles: [viewer]}
       summary: Get document metadata and current status
       security:
         - ApiKey: []
@@ -136,6 +139,7 @@ paths:
     delete:
       tags: [Documents]
       operationId: deleteDocument
+      x-required-authorization: {api_key_scopes: [write], bff_roles: [editor]}
       summary: Start tenant-scoped deletion cascade
       security:
         - ApiKey: []
@@ -160,6 +164,7 @@ paths:
     get:
       tags: [Jobs]
       operationId: getJob
+      x-required-authorization: {api_key_scopes: [read], bff_roles: [viewer]}
       summary: Poll ingestion or deletion status
       security:
         - ApiKey: []
@@ -176,6 +181,7 @@ paths:
     delete:
       tags: [Jobs]
       operationId: cancelJob
+      x-required-authorization: {api_key_scopes: [write], bff_roles: [editor]}
       summary: Cancel a queued or cancellable running job
       security:
         - ApiKey: []
@@ -194,6 +200,7 @@ paths:
     post:
       tags: [Jobs]
       operationId: retryJob
+      x-required-authorization: {api_key_scopes: [write], bff_roles: [editor]}
       summary: Retry an eligible failed job
       security:
         - ApiKey: []
@@ -218,6 +225,7 @@ paths:
     get:
       tags: [Collections]
       operationId: listCollections
+      x-required-authorization: {api_key_scopes: [read], bff_roles: [viewer]}
       summary: List tenant collections
       security: [{ApiKey: []}, {BffSession: []}]
       parameters:
@@ -234,6 +242,7 @@ paths:
     post:
       tags: [Collections]
       operationId: createCollection
+      x-required-authorization: {api_key_scopes: [write], bff_roles: [editor]}
       summary: Create a collection
       security: [{ApiKey: []}, {BffSession: []}]
       parameters:
@@ -264,6 +273,7 @@ paths:
     get:
       tags: [Collections]
       operationId: getCollection
+      x-required-authorization: {api_key_scopes: [read], bff_roles: [viewer]}
       summary: Get a collection
       security: [{ApiKey: []}, {BffSession: []}]
       responses:
@@ -278,6 +288,7 @@ paths:
     patch:
       tags: [Collections]
       operationId: updateCollection
+      x-required-authorization: {api_key_scopes: [write], bff_roles: [editor]}
       summary: Rename or update collection metadata
       security: [{ApiKey: []}, {BffSession: []}]
       parameters:
@@ -301,6 +312,7 @@ paths:
     delete:
       tags: [Collections]
       operationId: deleteCollection
+      x-required-authorization: {api_key_scopes: [write], bff_roles: [editor]}
       summary: Start collection and document deletion cascade
       security: [{ApiKey: []}, {BffSession: []}]
       responses:
@@ -317,6 +329,7 @@ paths:
     post:
       tags: [Query]
       operationId: queryKnowledgeBase
+      x-required-authorization: {api_key_scopes: [read], bff_roles: [viewer]}
       summary: Query authorized collections, optionally streaming via SSE
       description: For stream=true, response uses text/event-stream and follows x-sse-contract. It is not automatically resumable; client cancellation is best effort.
       security: [{ApiKey: []}, {BffSession: []}]
@@ -376,6 +389,7 @@ paths:
     post:
       tags: [Conversations]
       operationId: createConversation
+      x-required-authorization: {api_key_scopes: [read], bff_roles: [viewer]}
       summary: Create conversation
       security: [{ApiKey: []}, {BffSession: []}]
       parameters:
@@ -398,6 +412,7 @@ paths:
     get:
       tags: [Conversations]
       operationId: listConversations
+      x-required-authorization: {api_key_scopes: [read], bff_roles: [viewer]}
       summary: List/search current user's conversations
       security: [{ApiKey: []}, {BffSession: []}]
       parameters:
@@ -423,6 +438,7 @@ paths:
     get:
       tags: [Conversations]
       operationId: getConversation
+      x-required-authorization: {api_key_scopes: [read], bff_roles: [viewer]}
       summary: Get conversation metadata
       security: [{ApiKey: []}, {BffSession: []}]
       responses:
@@ -437,6 +453,7 @@ paths:
     patch:
       tags: [Conversations]
       operationId: updateConversation
+      x-required-authorization: {api_key_scopes: [read], bff_roles: [viewer]}
       summary: Rename or pin conversation
       security: [{ApiKey: []}, {BffSession: []}]
       parameters:
@@ -460,6 +477,7 @@ paths:
     delete:
       tags: [Conversations]
       operationId: deleteConversation
+      x-required-authorization: {api_key_scopes: [read], bff_roles: [viewer]}
       summary: Delete conversation and messages
       security: [{ApiKey: []}, {BffSession: []}]
       responses:
@@ -471,6 +489,7 @@ paths:
     get:
       tags: [Conversations]
       operationId: listMessages
+      x-required-authorization: {api_key_scopes: [read], bff_roles: [viewer]}
       summary: Page messages in a conversation
       security: [{ApiKey: []}, {BffSession: []}]
       parameters:
@@ -493,6 +512,7 @@ paths:
     post:
       tags: [Feedback]
       operationId: createFeedback
+      x-required-authorization: {api_key_scopes: [read], bff_roles: [viewer]}
       summary: Submit user feedback on an answer
       security: [{ApiKey: []}, {BffSession: []}]
       parameters:
@@ -519,6 +539,7 @@ paths:
     get:
       tags: [Admin]
       operationId: listQuarantine
+      x-required-authorization: {api_key_scopes: [admin], bff_roles: [admin]}
       summary: List tenant quarantined chunks
       security: [{ApiKey: []}, {BffSession: []}]
       parameters:
@@ -540,6 +561,7 @@ paths:
     get:
       tags: [Admin]
       operationId: getQuarantineItem
+      x-required-authorization: {api_key_scopes: [admin], bff_roles: [admin]}
       summary: Read one quarantined chunk as escaped plain text
       security: [{ApiKey: []}, {BffSession: []}]
       parameters:
@@ -559,6 +581,7 @@ paths:
     post:
       tags: [Admin]
       operationId: decideQuarantine
+      x-required-authorization: {api_key_scopes: [admin], bff_roles: [admin]}
       summary: Approve or reject quarantined chunk
       security: [{ApiKey: []}, {BffSession: []}]
       parameters:
@@ -588,6 +611,7 @@ paths:
     get:
       tags: [Admin]
       operationId: getUsage
+      x-required-authorization: {api_key_scopes: [admin], bff_roles: [admin]}
       summary: Get tenant usage and estimated cost over a bounded date range
       security: [{ApiKey: []}, {BffSession: []}]
       parameters:
@@ -613,6 +637,7 @@ paths:
     get:
       tags: [Admin]
       operationId: listApiKeys
+      x-required-authorization: {api_key_scopes: [admin], bff_roles: [admin]}
       summary: List API key metadata, never secret values
       security: [{ApiKey: []}, {BffSession: []}]
       parameters:
@@ -629,6 +654,7 @@ paths:
     post:
       tags: [Admin]
       operationId: createApiKey
+      x-required-authorization: {api_key_scopes: [admin], bff_roles: [admin]}
       summary: Issue an API key; plaintext returned once
       security: [{ApiKey: []}, {BffSession: []}]
       parameters:
@@ -653,6 +679,7 @@ paths:
     delete:
       tags: [Admin]
       operationId: revokeApiKey
+      x-required-authorization: {api_key_scopes: [admin], bff_roles: [admin]}
       summary: Revoke tenant API key
       security: [{ApiKey: []}, {BffSession: []}]
       parameters:
@@ -669,6 +696,7 @@ paths:
     get:
       tags: [Admin]
       operationId: getAdminStatus
+      x-required-authorization: {api_key_scopes: [admin], bff_roles: [admin]}
       summary: Tenant-safe operational status summary
       security: [{ApiKey: []}, {BffSession: []}]
       responses:
@@ -684,6 +712,7 @@ paths:
     get:
       tags: [Operations]
       operationId: liveness
+      x-required-authorization: {public_probe: true}
       summary: Process liveness probe
       security: []
       responses:
@@ -697,6 +726,7 @@ paths:
     get:
       tags: [Operations]
       operationId: readiness
+      x-required-authorization: {public_probe: true}
       summary: Readiness probe for required dependencies
       security: []
       responses:
@@ -714,6 +744,7 @@ paths:
     get:
       tags: [Operations]
       operationId: metrics
+      x-required-authorization: {private_scraper: true}
       summary: Private Prometheus metrics endpoint
       security:
         - ScrapeToken: []
@@ -728,6 +759,7 @@ paths:
     get:
       tags: [Operations]
       operationId: version
+      x-required-authorization: {api_key_scopes: [read], bff_roles: [viewer]}
       summary: Runtime release metadata
       security: [{ApiKey: []}, {BffSession: []}]
       responses:
