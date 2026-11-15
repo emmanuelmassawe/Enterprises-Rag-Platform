@@ -34,8 +34,8 @@ paths:
       summary: Upload a PDF for asynchronous ingestion
       description: One PDF per multipart request. Idempotency-Key required. Limits are configurable; proposed default max is 100 MiB.
       security:
-        - ApiKey: [write]
-        - BffSession: [editor]
+        - ApiKey: []
+        - BffSession: []
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -90,8 +90,8 @@ paths:
       operationId: listDocuments
       summary: List documents in the resolved tenant
       security:
-        - ApiKey: [read]
-        - BffSession: [viewer]
+        - ApiKey: []
+        - BffSession: []
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
@@ -122,8 +122,8 @@ paths:
       operationId: getDocument
       summary: Get document metadata and current status
       security:
-        - ApiKey: [read]
-        - BffSession: [viewer]
+        - ApiKey: []
+        - BffSession: []
       responses:
         '200':
           description: Document.
@@ -138,8 +138,8 @@ paths:
       operationId: deleteDocument
       summary: Start tenant-scoped deletion cascade
       security:
-        - ApiKey: [write]
-        - BffSession: [editor]
+        - ApiKey: []
+        - BffSession: []
       responses:
         '202':
           description: Deletion operation accepted.
@@ -162,8 +162,8 @@ paths:
       operationId: getJob
       summary: Poll ingestion or deletion status
       security:
-        - ApiKey: [read]
-        - BffSession: [viewer]
+        - ApiKey: []
+        - BffSession: []
       responses:
         '200':
           description: Job status.
@@ -178,8 +178,8 @@ paths:
       operationId: cancelJob
       summary: Cancel a queued or cancellable running job
       security:
-        - ApiKey: [write]
-        - BffSession: [editor]
+        - ApiKey: []
+        - BffSession: []
       responses:
         '202':
           description: Cancellation requested.
@@ -196,8 +196,8 @@ paths:
       operationId: retryJob
       summary: Retry an eligible failed job
       security:
-        - ApiKey: [write]
-        - BffSession: [editor]
+        - ApiKey: []
+        - BffSession: []
       parameters:
         - name: job_id
           in: path
@@ -219,7 +219,7 @@ paths:
       tags: [Collections]
       operationId: listCollections
       summary: List tenant collections
-      security: [{ApiKey: [read]}, {BffSession: [viewer]}]
+      security: [{ApiKey: []}, {BffSession: []}]
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
@@ -235,7 +235,7 @@ paths:
       tags: [Collections]
       operationId: createCollection
       summary: Create a collection
-      security: [{ApiKey: [write]}, {BffSession: [editor]}]
+      security: [{ApiKey: []}, {BffSession: []}]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -265,7 +265,7 @@ paths:
       tags: [Collections]
       operationId: getCollection
       summary: Get a collection
-      security: [{ApiKey: [read]}, {BffSession: [viewer]}]
+      security: [{ApiKey: []}, {BffSession: []}]
       responses:
         '200':
           description: Collection.
@@ -279,7 +279,7 @@ paths:
       tags: [Collections]
       operationId: updateCollection
       summary: Rename or update collection metadata
-      security: [{ApiKey: [write]}, {BffSession: [editor]}]
+      security: [{ApiKey: []}, {BffSession: []}]
       parameters:
         - $ref: '#/components/parameters/IfMatch'
       requestBody:
@@ -302,7 +302,7 @@ paths:
       tags: [Collections]
       operationId: deleteCollection
       summary: Start collection and document deletion cascade
-      security: [{ApiKey: [write]}, {BffSession: [editor]}]
+      security: [{ApiKey: []}, {BffSession: []}]
       responses:
         '202':
           description: Deletion accepted.
@@ -319,7 +319,7 @@ paths:
       operationId: queryKnowledgeBase
       summary: Query authorized collections, optionally streaming via SSE
       description: For stream=true, response uses text/event-stream and follows x-sse-contract. It is not automatically resumable; client cancellation is best effort.
-      security: [{ApiKey: [read]}, {BffSession: [viewer]}]
+      security: [{ApiKey: []}, {BffSession: []}]
       parameters:
         - name: Accept
           in: header
@@ -377,7 +377,7 @@ paths:
       tags: [Conversations]
       operationId: createConversation
       summary: Create conversation
-      security: [{ApiKey: [read]}, {BffSession: [viewer]}]
+      security: [{ApiKey: []}, {BffSession: []}]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -399,7 +399,7 @@ paths:
       tags: [Conversations]
       operationId: listConversations
       summary: List/search current user's conversations
-      security: [{ApiKey: [read]}, {BffSession: [viewer]}]
+      security: [{ApiKey: []}, {BffSession: []}]
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
@@ -424,7 +424,7 @@ paths:
       tags: [Conversations]
       operationId: getConversation
       summary: Get conversation metadata
-      security: [{ApiKey: [read]}, {BffSession: [viewer]}]
+      security: [{ApiKey: []}, {BffSession: []}]
       responses:
         '200':
           description: Conversation.
@@ -438,7 +438,7 @@ paths:
       tags: [Conversations]
       operationId: updateConversation
       summary: Rename or pin conversation
-      security: [{ApiKey: [read]}, {BffSession: [viewer]}]
+      security: [{ApiKey: []}, {BffSession: []}]
       parameters:
         - $ref: '#/components/parameters/IfMatch'
       requestBody:
@@ -461,7 +461,7 @@ paths:
       tags: [Conversations]
       operationId: deleteConversation
       summary: Delete conversation and messages
-      security: [{ApiKey: [read]}, {BffSession: [viewer]}]
+      security: [{ApiKey: []}, {BffSession: []}]
       responses:
         '204': {description: Deleted.}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -472,7 +472,7 @@ paths:
       tags: [Conversations]
       operationId: listMessages
       summary: Page messages in a conversation
-      security: [{ApiKey: [read]}, {BffSession: [viewer]}]
+      security: [{ApiKey: []}, {BffSession: []}]
       parameters:
         - name: conversation_id
           in: path
@@ -494,7 +494,7 @@ paths:
       tags: [Feedback]
       operationId: createFeedback
       summary: Submit user feedback on an answer
-      security: [{ApiKey: [read]}, {BffSession: [viewer]}]
+      security: [{ApiKey: []}, {BffSession: []}]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -520,7 +520,7 @@ paths:
       tags: [Admin]
       operationId: listQuarantine
       summary: List tenant quarantined chunks
-      security: [{ApiKey: [admin]}, {BffSession: [admin]}]
+      security: [{ApiKey: []}, {BffSession: []}]
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
@@ -541,7 +541,7 @@ paths:
       tags: [Admin]
       operationId: getQuarantineItem
       summary: Read one quarantined chunk as escaped plain text
-      security: [{ApiKey: [admin]}, {BffSession: [admin]}]
+      security: [{ApiKey: []}, {BffSession: []}]
       parameters:
         - name: chunk_id
           in: path
@@ -560,7 +560,7 @@ paths:
       tags: [Admin]
       operationId: decideQuarantine
       summary: Approve or reject quarantined chunk
-      security: [{ApiKey: [admin]}, {BffSession: [admin]}]
+      security: [{ApiKey: []}, {BffSession: []}]
       parameters:
         - name: chunk_id
           in: path
@@ -589,7 +589,7 @@ paths:
       tags: [Admin]
       operationId: getUsage
       summary: Get tenant usage and estimated cost over a bounded date range
-      security: [{ApiKey: [admin]}, {BffSession: [admin]}]
+      security: [{ApiKey: []}, {BffSession: []}]
       parameters:
         - name: from
           in: query
@@ -614,7 +614,7 @@ paths:
       tags: [Admin]
       operationId: listApiKeys
       summary: List API key metadata, never secret values
-      security: [{ApiKey: [admin]}, {BffSession: [admin]}]
+      security: [{ApiKey: []}, {BffSession: []}]
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
@@ -630,7 +630,7 @@ paths:
       tags: [Admin]
       operationId: createApiKey
       summary: Issue an API key; plaintext returned once
-      security: [{ApiKey: [admin]}, {BffSession: [admin]}]
+      security: [{ApiKey: []}, {BffSession: []}]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -654,7 +654,7 @@ paths:
       tags: [Admin]
       operationId: revokeApiKey
       summary: Revoke tenant API key
-      security: [{ApiKey: [admin]}, {BffSession: [admin]}]
+      security: [{ApiKey: []}, {BffSession: []}]
       parameters:
         - name: key_id
           in: path
@@ -670,7 +670,7 @@ paths:
       tags: [Admin]
       operationId: getAdminStatus
       summary: Tenant-safe operational status summary
-      security: [{ApiKey: [admin]}, {BffSession: [admin]}]
+      security: [{ApiKey: []}, {BffSession: []}]
       responses:
         '200':
           description: Tenant-safe status; no infrastructure secrets or hostnames.
@@ -729,7 +729,7 @@ paths:
       tags: [Operations]
       operationId: version
       summary: Runtime release metadata
-      security: [{ApiKey: [read]}, {BffSession: [viewer]}]
+      security: [{ApiKey: []}, {BffSession: []}]
       responses:
         '200':
           description: Version metadata.
