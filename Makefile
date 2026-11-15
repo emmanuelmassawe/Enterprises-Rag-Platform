@@ -21,6 +21,9 @@ typecheck:
 smoke:
 	uv run python scripts/smoke.py
 
+security-audit:
+	uv run pip-audit --skip-editable
+
 # These targets are activated in the milestones that introduce their tools and data.
 migrate eval redteam load-test tf-plan tf-apply:
 	@echo "$@ is not available yet; it will be enabled in the milestone that introduces it."
