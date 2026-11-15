@@ -1,8 +1,8 @@
 """Local HTTP smoke check for the liveness and readiness routes."""
 
+import time
 from urllib.error import URLError
 from urllib.request import urlopen
-import time
 
 
 def main() -> int:
