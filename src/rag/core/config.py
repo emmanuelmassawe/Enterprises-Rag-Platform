@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     app_env: Literal["development", "test", "staging", "production"] = "development"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     metrics_scrape_token: SecretStr | None = None
+
     @field_validator("metrics_scrape_token", mode="before")
     @classmethod
     def validate_metrics_token(cls, token: object) -> object:

@@ -1,8 +1,8 @@
 """Behavior tests for the initial operational HTTP contract."""
 
+import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
-import pytest
 
 from rag.api.main import create_app
 from rag.core.config import Settings
@@ -57,7 +57,7 @@ def test_metrics_route_requires_bearer_secret() -> None:
 def test_metrics_token_must_be_strong() -> None:
     """Reject weak scrape credentials during settings validation."""
     with pytest.raises(ValidationError):
-        Settings(metrics_scrape_token="short")
+        Settings(metrics_scrape_token="short")  # noqa: S106 - intentionally weak validation input
 
 
 def test_metrics_route_is_disabled_when_token_is_empty() -> None:

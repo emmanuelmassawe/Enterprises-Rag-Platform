@@ -1,4 +1,4 @@
-.PHONY: setup dev test lint typecheck smoke migrate eval redteam load-test tf-plan tf-apply
+.PHONY: setup dev test lint typecheck smoke security-audit migrate eval redteam load-test tf-plan tf-apply
 
 setup:
 	uv sync --all-groups
