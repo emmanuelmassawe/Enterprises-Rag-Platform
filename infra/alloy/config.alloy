@@ -1,0 +1,89 @@
+prometheus.scrape "rag_api" {
+	targets = [
+		{"__address__" = sys.env("API_METRICS_TARGET"), "service" = "api"},
+	]
+	scrape_interval = "15s"
+
+	authorization {
+		type        = "Bearer"
+		credentials = sys.env("METRICS_SCRAPE_TOKEN")
+	}
+	forward_to = [prometheus.remote_write.grafana.receiver]
+}
+
+prometheus.exporter.postgres "platform" {
+	data_source_names = [sys.env("DATABASE_URL")]
+}
+
+prometheus.scrape "postgres" {
+	targets    = prometheus.exporter.postgres.platform.targets
+	forward_to = [prometheus.remote_write.grafana.receiver]
+}
+
+prometheus.exporter.redis "state" {
+	redis_addr = sys.env("STATE_REDIS_URL")
+}
+
+prometheus.scrape "redis_state" {
+	targets    = prometheus.exporter.redis.state.targets
+	forward_to = [prometheus.remote_write.grafana.receiver]
+}
+
+prometheus.exporter.redis "cache" {
+	redis_addr = sys.env("CACHE_REDIS_URL")
+}
+
+prometheus.scrape "redis_cache" {
+	targets    = prometheus.exporter.redis.cache.targets
+	forward_to = [prometheus.remote_write.grafana.receiver]
+}
+
+prometheus.remote_write "grafana" {
+	endpoint {
+		url = sys.env("GRAFANA_PROMETHEUS_URL")
+
+		basic_auth {
+			username = sys.env("GRAFANA_PROMETHEUS_USERNAME")
+			password = sys.env("GRAFANA_PROMETHEUS_PASSWORD")
+		}
+	}
+}
+
+otelcol.receiver.otlp "rag" {
+	http {
+		endpoint = "0.0.0.0:4318"
+	}
+
+	output {
+		traces = [otelcol.exporter.otlphttp.tempo.input]
+		logs   = [otelcol.exporter.otlphttp.loki.input]
+	}
+}
+
+otelcol.auth.basic "tempo" {
+	client_auth {
+		username = sys.env("GRAFANA_TEMPO_USERNAME")
+		password = sys.env("GRAFANA_TEMPO_PASSWORD")
+	}
+}
+
+otelcol.exporter.otlphttp "tempo" {
+	client {
+		endpoint = sys.env("GRAFANA_TEMPO_ENDPOINT")
+		auth     = otelcol.auth.basic.tempo.handler
+	}
+}
+
+otelcol.auth.basic "loki" {
+	client_auth {
+		username = sys.env("GRAFANA_LOKI_USERNAME")
+		password = sys.env("GRAFANA_LOKI_PASSWORD")
+	}
+}
+
+otelcol.exporter.otlphttp "loki" {
+	client {
+		endpoint = sys.env("GRAFANA_LOKI_ENDPOINT")
+		auth     = otelcol.auth.basic.loki.handler
+	}
+}

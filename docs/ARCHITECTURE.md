@@ -1,6 +1,6 @@
 # Architecture
 
-Status: Phase 0 design approved; Milestones 2-5 implementation map. M5 implements redacted request spans, optional metadata-only LangSmith export, query/worker metrics, local Alloy/Prometheus/Grafana wiring, and additional AI security controls. Staging alert exercises, nested LangSmith pipeline spans, and owner privacy/budget gates remain open.
+Status: Phase 0 design approved; M2-M6 implementation map and M7 Terraform configuration. M7 adds Render/Grafana Terraform for owner-configured staging infrastructure. Staging apply, worker metric export, application OTLP log export, Grafana Cloud alert delivery exercise, and owner privacy/budget gates remain open.
 
 ## Context and containers
 
@@ -135,6 +135,7 @@ The live query path is `src/rag/api/routers/query.py` → `QueryService` → ten
 | NFR-PRIV-001 | ADR-011/015 allowlisted metadata-only telemetry; ADR-014 query data remains in tenant-scoped DB/cache and is not exported | Redaction unit tests; SDK serialized-export integration test, provider retention/deletion review and staging proof remain open |
 | NFR-REL-001 | ADR-004 durable state separated from ADR-014 evictable cache; cache read/write failure falls through to query path | Redis fault tests and cache invalidation tests |
 | NFR-OPS-001 | ADR-014 bounded provider timeout, circuit breaker, max output tokens, context size and request top-k | Timeout/error tests and staging capacity verification |
+| NFR-AVAIL-001, NFR-DR-001, NFR-SEC-003, NFR-OBS-001, NFR-OPS-001, NFR-COST-001 | ADR-017 same-region private Render services, independent Redis policies, sensitive config, remote locked state, pinned provider/image versions, and explicit cost-bearing plan inputs | Provider validation passed; staging apply, telemetry smoke, restore drill, and budget confirmation remain open |
 | NFR-MAINT-001/TEST-001 | ADR-014 query ports isolate Postgres, Gemini and Redis adapters; API layer depends only on the query port | import-linter, strict mypy, port-contract tests and >=80% coverage |
 
 ## Observability and privacy
@@ -160,7 +161,7 @@ flowchart TB
     Worker --> PG
     Worker --> KV1
     API --> Alloy
-    Worker --> Alloy
+    Worker -. worker metrics export pending .-> Alloy
   end
   API --> Obj[(S3-compatible object store)]
   API -. encrypted/redacted .-> Gemini[Gemini]
@@ -168,7 +169,7 @@ flowchart TB
   Alloy --> Grafana[Grafana Cloud]
 ```
 
-Terraform is the infrastructure source of truth. Provider/API capability, service plans, region and secrets are reviewed before any `.tf` implementation. Paid Render Postgres supports backups/PITR according to current docs, with recovery window tied to workspace plan; RPO/RTO remain targets until tested. Paid Key Value persistence and policy are selected separately. No production apply outside owner-approved CI/CD. The web/BFF and API use private service connections where supported; no public DB/Redis ingress.
+Terraform is the infrastructure source of truth; see [ADR-017](ADR/ADR-017-m7-render-grafana-infrastructure.md). The provider schemas were checked against pinned versions and `terraform validate` passed. Resource creation awaits owner region, plan, account, secret and remote-state inputs. Paid Render Postgres supports backups/PITR according to current docs, with recovery window tied to workspace plan; RPO/RTO remain targets until tested. Paid Key Value persistence and policy are selected separately. No production apply outside owner-approved CI/CD. Postgres/Redis have no public allow-list entries. `rag-web` remains deferred to M8. Worker pull metrics and app OTLP logs are not connected to cloud telemetry yet.
 
 ## Milestone 3 ingestion path
 

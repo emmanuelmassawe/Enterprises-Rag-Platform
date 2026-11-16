@@ -1,0 +1,17 @@
+project_name             = "enterprise-rag-platform"
+repository_url           = "https://github.com/OWNER/REPOSITORY"
+deploy_branch            = "main"
+region                   = "OWNER_CONFIRM_RENDER_REGION"
+service_plan             = "" # Set only when enabling application services.
+postgres_plan            = "OWNER_CONFIRM_POSTGRES_PLAN"
+redis_plan               = "OWNER_CONFIRM_REDIS_PLAN"
+deploy_production        = false
+deploy_application_services = false
+deploy_grafana_resources = false
+
+# Stage 1 creates the Render project and staging Postgres/Redis foundation only.
+# Stage 2: set deploy_application_services=true and supply database_runtime_urls,
+# blob_bucket_names, blob_endpoint_urls, blob_regions, and app_secrets via TF_VAR_*.
+# Stage 3: set deploy_grafana_resources=true and supply Grafana credentials plus
+# alloy_otlp_endpoints and api_metrics_targets after Render assigns private hostnames.
+# Never place real credentials in this file; use protected environment variables.

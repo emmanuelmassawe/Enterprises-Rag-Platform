@@ -1,0 +1,100 @@
+name: Terraform staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_application_services:
+        description: Enable the API and worker after rag_runtime role, bucket, service plan and app secrets are ready
+        required: true
+        type: boolean
+        default: false
+      deploy_grafana_resources:
+        description: Enable Grafana resources after the owner Grafana Cloud account and credentials are ready
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-staging:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      HCP_TERRAFORM_ORGANIZATION: ${{ vars.HCP_TERRAFORM_ORGANIZATION }}
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_TOKEN_app_terraform_io }}
+      TF_VAR_render_api_key: ${{ secrets.RENDER_API_KEY }}
+      TF_VAR_render_owner_id: ${{ secrets.RENDER_OWNER_ID }}
+      TF_VAR_grafana_url: ${{ vars.GRAFANA_URL }}
+      TF_VAR_grafana_auth_token: ${{ secrets.GRAFANA_AUTH_TOKEN }}
+      TF_VAR_grafana_prometheus_url: ${{ vars.GRAFANA_PROMETHEUS_QUERY_URL }}
+      TF_VAR_grafana_prometheus_remote_write_url: ${{ vars.GRAFANA_PROMETHEUS_REMOTE_WRITE_URL }}
+      TF_VAR_grafana_prometheus_username: ${{ secrets.GRAFANA_PROMETHEUS_USERNAME }}
+      TF_VAR_grafana_prometheus_password: ${{ secrets.GRAFANA_PROMETHEUS_PASSWORD }}
+      TF_VAR_grafana_alert_email: ${{ secrets.GRAFANA_ALERT_EMAIL }}
+      TF_VAR_grafana_loki_endpoint: ${{ vars.GRAFANA_LOKI_OTLP_ENDPOINT }}
+      TF_VAR_grafana_loki_username: ${{ secrets.GRAFANA_LOKI_USERNAME }}
+      TF_VAR_grafana_loki_password: ${{ secrets.GRAFANA_LOKI_PASSWORD }}
+      TF_VAR_grafana_tempo_endpoint: ${{ vars.GRAFANA_TEMPO_OTLP_ENDPOINT }}
+      TF_VAR_grafana_tempo_username: ${{ secrets.GRAFANA_TEMPO_USERNAME }}
+      TF_VAR_grafana_tempo_password: ${{ secrets.GRAFANA_TEMPO_PASSWORD }}
+      TF_VAR_project_name: enterprise-rag-platform
+      TF_VAR_repository_url: https://github.com/${{ github.repository }}
+      TF_VAR_deploy_branch: main
+      TF_VAR_region: ${{ vars.RENDER_REGION }}
+      TF_VAR_service_plan: ${{ vars.RENDER_SERVICE_PLAN }}
+      TF_VAR_postgres_plan: ${{ vars.RENDER_POSTGRES_PLAN }}
+      TF_VAR_redis_plan: ${{ vars.RENDER_REDIS_PLAN }}
+      TF_VAR_database_runtime_urls: ${{ secrets.TERRAFORM_DATABASE_RUNTIME_URLS_JSON || '{}' }}
+      TF_VAR_app_secrets: ${{ secrets.TERRAFORM_APP_SECRETS_JSON || '{}' }}
+      TF_VAR_langsmith_endpoints: ${{ vars.TERRAFORM_LANGSMITH_ENDPOINTS_JSON || '{}' }}
+      TF_VAR_blob_bucket_names: ${{ vars.TERRAFORM_BLOB_BUCKET_NAMES_JSON || '{}' }}
+      TF_VAR_blob_endpoint_urls: ${{ vars.TERRAFORM_BLOB_ENDPOINT_URLS_JSON || '{}' }}
+      TF_VAR_blob_regions: ${{ vars.TERRAFORM_BLOB_REGIONS_JSON || '{}' }}
+      TF_VAR_alloy_otlp_endpoints: ${{ vars.TERRAFORM_ALLOY_OTLP_ENDPOINTS_JSON || '{}' }}
+      TF_VAR_api_metrics_targets: ${{ vars.TERRAFORM_API_METRICS_TARGETS_JSON || '{}' }}
+      TF_VAR_deploy_application_services: ${{ inputs.deploy_application_services }}
+      TF_VAR_deploy_grafana_resources: ${{ inputs.deploy_grafana_resources }}
+      TF_VAR_deploy_production: "false"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Configure remote state
+        shell: bash
+        run: |
+          if [[ ! "$HCP_TERRAFORM_ORGANIZATION" =~ ^[A-Za-z0-9_-]+$ ]]; then
+            echo "HCP Terraform organization is missing or malformed" >&2
+            exit 1
+          fi
+          printf 'organization = "%s"\nworkspaces { name = "enterprise-rag-platform" }\n' \
+            "$HCP_TERRAFORM_ORGANIZATION" > infra/terraform/envs/backend.hcl
+
+      - name: Initialize remote workspace
+        run: docker run --rm -e TF_TOKEN_app_terraform_io -v "$PWD:/workspace" -w /workspace/infra/terraform hashicorp/terraform:1.17.2 init -input=false -backend-config=envs/backend.hcl
+
+      - name: Plan and apply staging
+        shell: bash
+        run: |
+          env | grep '^TF_VAR_' > "$RUNNER_TEMP/terraform-staging.env"
+          set +e
+          docker run --rm --env-file "$RUNNER_TEMP/terraform-staging.env" -e TF_TOKEN_app_terraform_io -v "$PWD:/workspace" -w /workspace/infra/terraform hashicorp/terraform:1.17.2 plan -input=false -out=/workspace/infra/terraform/staging.tfplan >"$RUNNER_TEMP/staging-plan.log" 2>&1
+          plan_status=$?
+          if [ "$plan_status" -ne 0 ]; then
+            echo "Terraform staging plan failed. Detailed output is withheld from public workflow logs." >&2
+            exit "$plan_status"
+          fi
+          docker run --rm -e TF_TOKEN_app_terraform_io -v "$PWD:/workspace" -w /workspace/infra/terraform hashicorp/terraform:1.17.2 apply -input=false staging.tfplan >"$RUNNER_TEMP/staging-apply.log" 2>&1
+          apply_status=$?
+          if [ "$apply_status" -ne 0 ]; then
+            echo "Terraform staging apply failed. Detailed output is withheld from public workflow logs." >&2
+            exit "$apply_status"
+          fi
+          echo "Terraform staging apply completed."

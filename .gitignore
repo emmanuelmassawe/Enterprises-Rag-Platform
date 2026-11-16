@@ -12,6 +12,9 @@ secrets/
 .terraform/
 *.tfvars
 !envs/*.tfvars.example
+*.backend.hcl
+*.tfplan
+/infra/terraform/envs/backend.hcl
 crash.log
 override.tf
 override.tf.json

@@ -1,0 +1,4 @@
+organization = "OWNER_HCP_TERRAFORM_ORGANIZATION"
+workspaces {
+  name = "enterprise-rag-platform"
+}

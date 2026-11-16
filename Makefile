@@ -36,8 +36,15 @@ bootstrap:
 eval:
 	uv run python scripts/evaluate.py
 
-tf-plan tf-apply:
-	@echo "$@ is not available yet; it will be enabled in the milestone that introduces it."
+tf-plan:
+	terraform -chdir=infra/terraform fmt -check -recursive
+	terraform -chdir=infra/terraform init -input=false -backend-config=envs/backend.hcl
+	terraform -chdir=infra/terraform validate
+	terraform -chdir=infra/terraform plan -input=false
+
+# Applies are performed only by the protected CI/CD workflow. This target is intentionally unavailable.
+tf-apply:
+	@echo "Terraform apply is CI-only; use the protected staging or production workflow."
 	@exit 2
 
 # Synthetic, provider-free smoke attacks for pull requests and local work.

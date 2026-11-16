@@ -50,10 +50,20 @@ Status: M2-M5 have implementation evidence. M5 wires OTel request spans, metadat
 | NFR-AI-001/002 | ADR-003, 008, 009, 013, 014; eligible chunk filters, evidence refusal, strict citation membership | M6 golden set and adversarial/browser tests; M4 unit tests cover citation mismatch | retrieval/groundedness/citation/refusal trends pending telemetry |
 | NFR-A11Y-001, UX-001 | ADR-009 | axe, Lighthouse, keyboard/SR and i18n E2E | accessibility score and issue count |
 | NFR-MAINT-001, TEST-001 | hexagonal layering, ingestion ports/adapters, CI contract, 80% unit coverage gate; ADR-013 | coverage, mypy, Ruff, import-linter, traceability CI | M3: 81% coverage, strict mypy, Ruff and import-linter pass; live provider contract tests remain planned |
-| NFR-OBS-001 | ADR-011/015, OTel middleware, Prometheus API/worker endpoints, bounded LangSmith adapter, Alloy/Grafana profile | telemetry/redaction unit tests, local profile check, staging alert exercise pending | request/query/job terminal metrics; stage timing/feedback and cloud missing-telemetry alerts remain open |
+| NFR-OBS-001 | ADR-011/015/017, OTel middleware, Prometheus API/worker endpoints, bounded LangSmith adapter, Alloy/Grafana profile | telemetry/redaction unit tests, local profile check, staging alert exercise pending | request/query/job terminal metrics; stage timing/feedback and cloud missing-telemetry alerts remain open |
 | NFR-PORT-001 | ADR-001, 005, 006, 008, 011, 012 | local Compose has separate Redis state/cache policies; shared adapter contract suites/local composition | adapter conformance report |
 | NFR-COMP-001 | ADR-009 | Playwright current/previous browser matrix | browser E2E pass rate |
 | NFR-COST-001 | ADR-008, 006 | provider reconciliation, spend-cap/kill-switch exercise | cost/query, spend/tenant, budget alert |
 | NFR-OPS-001 | ADR-004, 010, 012, 013, 014 | async lifecycle cleanup, bounded work, provider timeouts/circuit breakers, readiness and migration/runtime role separation; later SIGTERM/deploy checks | local migration and role smoke, unit tests; staging deploy/rollback not yet run | request metrics and readiness live; deployment health/rollback metrics planned |
 | NFR-DATA-001 | ADR-001, 004, 005, 006, 011, 013 | partial-write/crash tests and deletion/restore drills | deletion completion, recovery objectives |
+
+## Milestone 7 infrastructure traceability
+
+| Requirement/NFR | Component | Endpoint/resource | Verification | Monitoring/SLO |
+|---|---|---|---|---|
+| FR-STA-001 | `infra/terraform/main.tf`: Render API web service and readiness gate | Render API `/readyz`; protected API `/metrics` | Terraform fmt/validate and provider schema check passed; staging health probe pending | API readiness and availability SLI pending staging |
+| FR-STA-002, NFR-OBS-001 | Alloy private service and `infra/alloy/config.alloy` | API/Postgres/Redis scrape targets, OTLP HTTP `:4318`, Grafana Cloud remote write/OTLP | Alloy config validated against pinned v1.22.0 image; end-to-end cloud smoke pending; worker metrics and app stdout log export are known gaps | Dashboard and three alert rules are configured; alert delivery exercise pending |
+| NFR-REL-001, NFR-DR-001 | Separate Render Redis resources; Render Postgres | state/cache Redis internal URLs; Postgres internal URL | Provider schema validates; apply, Redis outage test, backup/restore drill pending | Redis memory/eviction and Postgres backup signals pending staging |
+| NFR-SEC-003 | Sensitive Terraform variables, Render env group, remote backend, isolated environments | GitHub protected staging environment and HCP workspace | Static secret scan/Checkov and live access review pending | No secret values in public CI output; state access audit pending |
+| NFR-OPS-001 | Terraform 1.17.2, exact-pinned providers, `/readyz` gate, CI-only apply | `make tf-plan`; protected staging workflow | `terraform fmt` and `terraform validate` run; staging plan/deploy/smoke/rollback pending owner inputs | Deploy status and readiness checks pending |
 
