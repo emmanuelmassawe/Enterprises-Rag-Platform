@@ -1,4 +1,4 @@
-.PHONY: setup dev test lint typecheck smoke security-audit migrate eval redteam load-test tf-plan tf-apply
+.PHONY: setup dev test lint typecheck smoke security-audit migrate bootstrap eval redteam load-test tf-plan tf-apply
 
 setup:
 	uv sync --all-groups
@@ -26,6 +26,9 @@ security-audit:
 
 migrate:
 	docker compose --profile tools run --rm migrator
+
+bootstrap:
+	docker compose --profile tools run --rm migrator python -m rag.db.bootstrap --tenant-name "$(TENANT_NAME)"
 
 # These targets are activated in the milestones that introduce their tools and data.
 eval redteam load-test tf-plan tf-apply:

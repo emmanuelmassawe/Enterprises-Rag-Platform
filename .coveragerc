@@ -1,0 +1,11 @@
+[run]
+branch = True
+source = rag
+omit =
+    src/rag/adapters/postgres/models.py
+    src/rag/db/migrations/env.py
+
+[report]
+fail_under = 80
+show_missing = True
+skip_covered = True

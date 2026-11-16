@@ -39,6 +39,8 @@ make migrate
 docker compose up --build api
 ```
 
+To provision a first local tenant and its one-time admin credential, run `make bootstrap TENANT_NAME="Example tenant"` after migrations. Store the emitted API key securely; it is shown once and cannot be retrieved later. The local migrator profile uses the privileged database role and must only be run by a trusted operator.
+
 In another terminal, `make smoke` checks liveness and readiness. Or run `docker compose up --build` and open `http://127.0.0.1:8000/healthz`. `/metrics` returns 403 until `METRICS_SCRAPE_TOKEN` is set to a random value of at least 32 characters and supplied as a Bearer token. Local Postgres uses trust authentication only on an unexposed internal Compose network; production must use managed credentials and separate runtime/migration roles.
 
 ## Configuration
@@ -62,5 +64,5 @@ Copy `.env.example` to `.env` for local changes. Never commit `.env`.
 
 The metrics endpoint is token-protected and should also be network-restricted by deployment configuration. Request IDs are bounded to a safe character set or regenerated. Logs omit request bodies, query strings, credentials and user identifiers. Liveness checks only the process. Readiness checks Postgres and the shared rate-limit store; a local in-process fallback is reported as not ready because it cannot enforce a cross-replica limit.
 
-The container runs as non-root, drops Linux capabilities in Compose, uses a read-only root filesystem, and has a liveness health check. The Python base image is pinned by version tag pending a verified immutable digest in a later hardening pass. See [architecture](docs/ARCHITECTURE.md) and the [decision records](docs/ADR/README.md).
+The container runs as non-root, drops Linux capabilities in Compose, uses a read-only root filesystem, and has a liveness health check. The Python base image and local database/Redis images are pinned by immutable digests. See [architecture](docs/ARCHITECTURE.md) and the [decision records](docs/ADR/README.md).
 
