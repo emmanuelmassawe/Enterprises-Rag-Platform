@@ -37,6 +37,7 @@ class IngestionChunk:
     section: str | None
     quarantined: bool
     trust_level: str = "untrusted"
+    reason_codes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,7 +99,9 @@ class IngestionRepository(Protocol):
 
     async def cancel_job(self, tenant_id: UUID, job_id: UUID) -> dict[str, object] | None: ...
 
-    async def retry_job(self, tenant_id: UUID, job_id: UUID) -> UUID | None: ...
+    async def retry_job(
+        self, tenant_id: UUID, job_id: UUID, idempotency_hash: str, request_digest: str
+    ) -> UUID | None: ...
 
     async def load_for_processing(
         self, tenant_id: UUID, document_id: UUID
@@ -126,6 +129,23 @@ class IngestionRepository(Protocol):
 
     async def fail_deletion(self, tenant_id: UUID, job_id: UUID) -> None: ...
 
+    async def list_quarantined(
+        self, tenant_id: UUID, document_id: UUID | None, cursor: UUID | None, limit: int
+    ) -> tuple[list[dict[str, object]], UUID | None]: ...
+
+    async def get_quarantined(self, tenant_id: UUID, chunk_id: UUID) -> dict[str, object] | None: ...
+
+    async def decide_quarantined(
+        self,
+        tenant_id: UUID,
+        actor_key_id: UUID,
+        chunk_id: UUID,
+        decision: str,
+        reason: str,
+        idempotency_hash: str,
+        request_digest: str,
+    ) -> tuple[str, object]: ...
+
 
 class QueueBackend(Protocol):
     """Bounded asynchronous ingestion queue."""
@@ -141,6 +161,8 @@ class InjectionDetector(Protocol):
     """Identify instruction-like content before indexing or retrieval."""
 
     def is_suspicious(self, content: str) -> bool: ...
+
+    def reason_codes(self, content: str) -> tuple[str, ...]: ...
 
 
 class IngestionApplication(Protocol):

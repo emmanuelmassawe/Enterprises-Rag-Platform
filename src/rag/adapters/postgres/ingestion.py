@@ -6,8 +6,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from sqlalchemy import Text, cast, delete, func, select, text, update
-from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.dialects.postgresql import ARRAY, insert
 
 from rag.adapters.postgres.models import (
     Chunk,
@@ -255,7 +254,9 @@ class PostgresIngestionRepository:
                 "kind": row.kind,
             }
 
-    async def retry_job(self, tenant_id: UUID, job_id: UUID) -> UUID | None:
+    async def retry_job(
+        self, tenant_id: UUID, job_id: UUID, idempotency_hash: str, request_digest: str
+    ) -> UUID | None:
         new_job_id = uuid4()
         async with self._database.tenant_session(tenant_id) as session:
             previous = await session.scalar(
@@ -270,6 +271,31 @@ class PostgresIngestionRepository:
             )
             if document is None:
                 return None
+            now = datetime.now(UTC)
+            claim = await session.execute(
+                insert(IdempotencyRecord)
+                .values(
+                    id=uuid4(),
+                    tenant_id=tenant_id,
+                    key_hash=idempotency_hash,
+                    request_digest=request_digest,
+                    result_resource_id=new_job_id,
+                    created_at=now,
+                    expires_at=now + timedelta(hours=24),
+                )
+                .on_conflict_do_nothing(constraint="uq_idempotency_tenant_key_hash")
+                .returning(IdempotencyRecord.id)
+            )
+            if claim.scalar_one_or_none() is None:
+                existing = await session.scalar(
+                    select(IdempotencyRecord).where(
+                        IdempotencyRecord.tenant_id == tenant_id,
+                        IdempotencyRecord.key_hash == idempotency_hash,
+                    )
+                )
+                if existing is None or existing.request_digest != request_digest:
+                    raise IdempotencyConflict("idempotency key conflicts with a prior retry")
+                return existing.result_resource_id
             document.status = "deleting" if previous.kind == "delete" else "queued"
             session.add(
                 Job(
@@ -338,7 +364,7 @@ class PostgresIngestionRepository:
                 return None
             job.status = "cancelled"
             job.stage = "cancelled"
-            if job.kind == "ingest" and job.document_id is not None:
+            if job.document_id is not None:
                 await session.execute(
                     update(Document)
                     .where(Document.tenant_id == tenant_id, Document.id == job.document_id)

@@ -277,6 +277,8 @@ async def upload_document(
             "The accepted upload could not be read back.",
         )
     document.pop("storage_key", None)
+    job.pop("document_id", None)
+    job.pop("kind", None)
     return {"document": document, "job": job, "request_id": request.state.request_id}
 
 
@@ -401,8 +403,28 @@ async def retry_job(
     request: Request,
     job_id: UUID,
     principal: Annotated[Principal, Depends(require_scope(Scope.WRITE))],
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
 ) -> dict[str, object]:
-    new_job_id = await _repository(request).retry_job(principal.tenant_id, job_id)
+    if not IDEMPOTENCY_KEY.fullmatch(idempotency_key):
+        raise ProblemException(
+            422,
+            "validation_failed",
+            "Validation failed",
+            "Idempotency-Key must be 32-128 safe characters.",
+        )
+    request_digest = hashlib.sha256(f"retry:{job_id}".encode()).hexdigest()
+    idempotency_hash = hashlib.sha256(idempotency_key.encode()).hexdigest()
+    try:
+        new_job_id = await _repository(request).retry_job(
+            principal.tenant_id, job_id, idempotency_hash, request_digest
+        )
+    except IdempotencyConflict as exc:
+        raise ProblemException(
+            409,
+            "idempotency_conflict",
+            "Conflict",
+            "The idempotency key was already used for a different retry.",
+        ) from exc
     if new_job_id is None:
         raise ProblemException(
             409, "job_not_retryable", "Conflict", "The job is not eligible for retry."

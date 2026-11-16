@@ -3,9 +3,9 @@
 from functools import lru_cache
 from pathlib import Path
 from tempfile import gettempdir
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -50,6 +50,20 @@ class Settings(BaseSettings):
     rate_limit_memory_fallback_requests: int = Field(default=10, ge=1, le=10_000)
     rate_limit_memory_fallback_window_seconds: int = Field(default=60, ge=1, le=86_400)
     metrics_scrape_token: SecretStr | None = None
+
+    @model_validator(mode="after")
+    def production_requires_shared_dependencies(self) -> Self:
+        """Prevent deployment from silently using local blobs or missing ingestion providers."""
+        if self.app_env in {"staging", "production"}:
+            if self.database_url is None or self.redis_url is None:
+                raise ValueError("staging and production require DATABASE_URL and REDIS_URL")
+            if self.blob_backend != "s3" or self.blob_bucket == "enterprise-rag-local":
+                raise ValueError("staging and production require a named private S3 bucket")
+            if self.embedding_api_key is None:
+                raise ValueError("staging and production require EMBEDDING_API_KEY")
+            if self.blob_endpoint_url and not self.blob_endpoint_url.startswith("https://"):
+                raise ValueError("staging and production S3 endpoints must use HTTPS")
+        return self
 
     @field_validator("log_level", mode="before")
     @classmethod

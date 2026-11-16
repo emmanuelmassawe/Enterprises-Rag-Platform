@@ -131,10 +131,6 @@ class Document(TenantRow, Base):
     metadata_json: Mapped[dict[str, Any]] = mapped_column(
         "metadata", JSONB, nullable=False, server_default="{}"
     )
-    quarantined: Mapped[bool] = mapped_column(nullable=False, server_default="false")
-    trust_level: Mapped[str] = mapped_column(String(16), nullable=False, server_default="untrusted")
-    embedding_model: Mapped[str | None] = mapped_column(String(120))
-    embedding_dimensions: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -175,6 +171,36 @@ class Chunk(TenantRow, Base):
     metadata_json: Mapped[dict[str, Any]] = mapped_column(
         "metadata", JSONB, nullable=False, server_default="{}"
     )
+    quarantined: Mapped[bool] = mapped_column(nullable=False, server_default="false")
+    quarantine_status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="clear")
+    trust_level: Mapped[str] = mapped_column(String(16), nullable=False, server_default="untrusted")
+    embedding_model: Mapped[str | None] = mapped_column(String(120))
+    embedding_dimensions: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class QuarantineDecision(TenantRow, Base):
+    __tablename__ = "quarantine_decisions"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_quarantine_decisions_tenant_id_id"),
+        UniqueConstraint(
+            "tenant_id", "idempotency_hash", name="uq_quarantine_decisions_tenant_key_hash"
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "chunk_id"], ["chunks.tenant_id", "chunks.id"], ondelete="CASCADE"
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "actor_key_id"], ["api_keys.tenant_id", "api_keys.id"], ondelete="RESTRICT"
+        ),
+        Index("ix_quarantine_tenant_created", "tenant_id", "created_at"),
+    )
+
+    chunk_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    actor_key_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    decision: Mapped[str] = mapped_column(String(16), nullable=False)
+    reason: Mapped[str] = mapped_column(String(1000), nullable=False)
+    idempotency_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -279,4 +305,5 @@ TENANT_TABLES = (
     "conversations",
     "messages",
     "query_logs",
+    "quarantine_decisions",
 )

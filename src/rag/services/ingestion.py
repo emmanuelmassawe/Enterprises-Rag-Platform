@@ -49,6 +49,11 @@ class HeuristicInjectionDetector:
     def is_suspicious(self, content: str) -> bool:
         return any(pattern.search(content) for pattern in INJECTION_PATTERNS)
 
+    def reason_codes(self, content: str) -> tuple[str, ...]:
+        if not self.is_suspicious(content):
+            return ()
+        return ("instruction_pattern",)
+
 
 def chunk_pages(
     pages: Sequence[ParsedPage],
@@ -93,6 +98,7 @@ def _chunk(ordinal: int, content: str, page: int, detector: InjectionDetector) -
         page=page,
         section=None,
         quarantined=detector.is_suspicious(content),
+        reason_codes=detector.reason_codes(content),
     )
 
 
@@ -171,6 +177,7 @@ class IngestionService(IngestionApplication):
             await self.blob_store.delete(storage_key)
             raise QueueUnavailable("queue_full") from exc
         except StorageUnavailable:
+            await self.blob_store.delete(storage_key)
             raise
         except Exception:
             await self.blob_store.delete(storage_key)

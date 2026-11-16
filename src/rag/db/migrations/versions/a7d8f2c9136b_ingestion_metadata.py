@@ -30,7 +30,8 @@ def upgrade() -> None:
         "chunks", sa.Column("quarantined", sa.Boolean(), server_default=sa.false(), nullable=False)
     )
     op.add_column(
-        "chunks", sa.Column("trust_level", sa.String(length=16), server_default="untrusted", nullable=False)
+        "chunks",
+        sa.Column("trust_level", sa.String(length=16), server_default="untrusted", nullable=False),
     )
     op.add_column("chunks", sa.Column("embedding_model", sa.String(length=120), nullable=True))
     op.add_column("chunks", sa.Column("embedding_dimensions", sa.Integer(), nullable=True))
