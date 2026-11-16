@@ -28,6 +28,7 @@ llm_tracer: LLMTracer = (
         settings.langsmith_api_key.get_secret_value(),
         settings.langsmith_project,
         settings.langsmith_endpoint,
+        settings.langsmith_sample_rate,
     )
     if settings.langsmith_tracing and settings.langsmith_api_key is not None
     else NoOpLLMTracer()
@@ -133,6 +134,7 @@ query_service = (
         tracer=llm_tracer,
         environment=settings.app_env,
         generation_enabled=settings.generation_enabled,
+        release_version=settings.release_version,
     )
     if database is not None and query_embeddings is not None and answer_generator is not None
     else None

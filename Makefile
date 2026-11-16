@@ -39,7 +39,7 @@ eval tf-plan tf-apply:
 
 # Synthetic, provider-free smoke attacks for pull requests and local work.
 redteam:
-	uv run pytest -q tests/security
+	uv run pytest -q -p no:cacheprovider tests/security
 
 # Requires explicit credentials and a synthetic tenant/collection on a non-production target.
 load-test:

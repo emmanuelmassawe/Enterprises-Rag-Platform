@@ -19,6 +19,7 @@ class _Models:
         return SimpleNamespace(
             text=self.text,
             usage_metadata=SimpleNamespace(prompt_token_count=24, candidates_token_count=9),
+            candidates=[SimpleNamespace(finish_reason=SimpleNamespace(name="STOP"))],
         )
 
 
@@ -56,6 +57,7 @@ async def test_gemini_adapter_uses_schema_no_tools_and_returns_usage(
 
     assert result.claims[0].chunk_ids == ("chunk-1",)
     assert result.input_tokens == 24 and result.output_tokens == 9
+    assert result.finish_reason == "stop"
     config = models.kwargs["config"]
     assert config.response_schema is not None
     assert not models.kwargs.get("tools")

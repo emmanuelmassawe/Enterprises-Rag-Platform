@@ -121,7 +121,7 @@ The live query path is `src/rag/api/routers/query.py` → `QueryService` → ten
 
 ## Observability and privacy
 
-API and worker emit JSON logs and metrics; API request spans include request/trace IDs, route template and status. Never use query text, user ID, request ID or document ID as metric labels. Raw prompts, retrieved text, API keys and PII are excluded from external telemetry; LangSmith uses allowlisted metadata and an async bounded queue. LangSmith nested stage traces/feedback remain incomplete. Local Grafana dashboards and Prometheus alert rules live in `observability/`; production Grafana Cloud contact points, retention, synthetic canary and log/trace links need deployment configuration. Grafana Faro is planned for browser errors/web vitals with message content excluded and identity masked. Every alert links to a runbook.
+API and worker emit JSON logs and metrics; API request spans include request/trace IDs, route template and status. Never use query text, user ID, request ID or document ID as metric labels. Raw prompts, retrieved text, API keys and PII are excluded from external telemetry; LangSmith uses allowlisted metadata and an async bounded queue. LangSmith has nested stage envelopes but per-stage timing/feedback is incomplete. Local Grafana dashboards and Prometheus alert rules live in `observability/`; production Grafana Cloud contact points, retention, synthetic canary and log/trace links need deployment configuration. Grafana Faro is planned for browser errors/web vitals with message content excluded and identity masked. Every alert links to a runbook.
 
 ## Deployment view
 

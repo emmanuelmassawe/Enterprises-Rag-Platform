@@ -88,3 +88,19 @@ def test_metrics_route_is_disabled_when_token_is_empty() -> None:
     response = client.get("/metrics", headers={"Authorization": f"Bearer {'a' * 40}"})
 
     assert response.status_code == 403
+
+
+def test_langsmith_tracing_requires_key_and_environment_project() -> None:
+    with pytest.raises(ValidationError, match="LANGSMITH_TRACING requires LANGSMITH_API_KEY"):
+        Settings(app_env="test", langsmith_tracing=True)
+    with pytest.raises(ValidationError, match="environment-specific"):
+        Settings(
+            app_env="staging",
+            database_url="postgresql+asyncpg://runtime@db/rag",
+            redis_url="redis://state:6379/0",
+            blob_backend="s3",
+            blob_bucket="synthetic-staging-bucket",
+            embedding_api_key="synthetic-key",
+            langsmith_tracing=True,
+            langsmith_api_key="synthetic-langsmith-key",
+        )

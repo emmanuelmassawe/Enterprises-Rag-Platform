@@ -64,13 +64,14 @@ In another terminal, `make smoke` checks liveness and readiness. Or run `docker 
 | Variable | Default | Purpose |
 |---|---|---|
 | `APP_NAME` | `enterprise-rag-api` | Service title and structured configuration. |
+| `RELEASE_VERSION` | `unknown` | Release label included in redacted telemetry; CI/deploy should set a commit or release identifier. |
 | `APP_ENV` | `development` | Environment: development, test, staging, production. |
 | `LOG_LEVEL` | `INFO` | Minimum structured log level. |
 | `METRICS_SCRAPE_TOKEN` | unset | Strong bearer secret required for `/metrics`; unset denies access. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | Optional OTLP/HTTP trace endpoint; local profile uses `http://alloy:4318/v1/traces`. |
 | `LANGSMITH_TRACING` | `false` | Opt in to metadata-only LangSmith runs; exporter does not receive prompts or outputs. |
 | `LANGSMITH_API_KEY` | unset | LangSmith key, required only when tracing is enabled. |
-| `LANGSMITH_PROJECT`, `LANGSMITH_ENDPOINT` | `rag-development`, unset | Environment-scoped project and optional regional API endpoint. Confirm region/retention with owner. |
+| `LANGSMITH_PROJECT`, `LANGSMITH_ENDPOINT`, `LANGSMITH_SAMPLE_RATE` | `rag-development`, unset, `1.0` | Environment-scoped project, optional regional endpoint and bounded sampling fraction. Confirm region/retention with owner. |
 | `AI_INPUT_PII_ACTION` | `flag` | `flag`, `redact`, or `block` common email/credential-shaped query input; proposed default needs owner confirmation. |
 | `GENERATION_ENABLED` | `true` | Set false to disable generation while query requests return a safe refusal. |
 | `WORKER_METRICS_PORT` | `9000` | Internal worker Prometheus endpoint; bind only on the private service network. |

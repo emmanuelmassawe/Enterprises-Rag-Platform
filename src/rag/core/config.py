@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = Field(default="enterprise-rag-api", min_length=1, max_length=80)
+    release_version: str = Field(default="unknown", min_length=1, max_length=128)
     app_env: Literal["development", "test", "staging", "production"] = "development"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     database_url: SecretStr | None = None
@@ -65,6 +66,7 @@ class Settings(BaseSettings):
     langsmith_api_key: SecretStr | None = None
     langsmith_project: str = Field(default="rag-development", min_length=1, max_length=128)
     langsmith_endpoint: str | None = Field(default=None, max_length=2_048)
+    langsmith_sample_rate: float = Field(default=1.0, ge=0.0, le=1.0)
     worker_metrics_port: int = Field(default=9000, ge=1024, le=65535)
 
     @model_validator(mode="after")
@@ -79,10 +81,12 @@ class Settings(BaseSettings):
                 raise ValueError("staging and production require EMBEDDING_API_KEY")
             if self.blob_endpoint_url and not self.blob_endpoint_url.startswith("https://"):
                 raise ValueError("staging and production S3 endpoints must use HTTPS")
-            if self.langsmith_tracing and self.langsmith_api_key is None:
-                raise ValueError("LANGSMITH_TRACING requires LANGSMITH_API_KEY")
             if self.langsmith_endpoint and not self.langsmith_endpoint.startswith("https://"):
                 raise ValueError("staging and production LangSmith endpoints must use HTTPS")
+            if self.langsmith_tracing and self.langsmith_project != f"rag-{self.app_env}":
+                raise ValueError("LANGSMITH_PROJECT must be environment-specific")
+        if self.langsmith_tracing and self.langsmith_api_key is None:
+            raise ValueError("LANGSMITH_TRACING requires LANGSMITH_API_KEY")
         return self
 
     @field_validator("log_level", mode="before")

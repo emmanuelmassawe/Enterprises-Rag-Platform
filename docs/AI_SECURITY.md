@@ -61,7 +61,7 @@ LangSmith endpoint/region, retention, contractual data protection, deletion API 
 - Heuristic injection detection can miss paraphrase, image/PDF visual tricks, non-English attacks and novel encodings.
 - Query-time generation quality and groundedness are not independently verified by an NLI/judge in M5; that work is evaluated in M6.
 - Daily spend quotas/provider spend cap need owner-set budgets. The kill switch is currently a deployment setting, not a remote, audited flag.
-- Full LangSmith nested step traces, feedback export, sampling, tenant opt-out and deletion cascade are not yet implemented.
+- LangSmith has metadata-only nested stage envelopes and configurable sampling, but per-stage timing, feedback export, tenant-specific opt-out and deletion cascade are not yet implemented.
 - Grafana Cloud contact points, synthetic canary, retention, missing-telemetry alerts, and cloud trace/log correlation need staging configuration.
 - Public CI must retain secret scanning/push protection and pinned actions. No customer data or real API keys belong in fixtures.
 

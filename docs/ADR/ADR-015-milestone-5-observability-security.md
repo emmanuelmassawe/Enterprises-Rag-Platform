@@ -27,7 +27,7 @@ M5 adds request correlation and low-cardinality service metrics, optional LLM tr
 
 ## Consequences and open gates
 
-- Platform traces can be correlated with LangSmith via request/trace identifiers, but the current adapter creates a metadata-only run rather than every nested pipeline span or feedback score.
+- Platform traces can be correlated with LangSmith via request/trace identifiers. The current adapter creates a metadata-only request parent and retrieval/generation/guardrails/citation child run envelopes, but it does not yet record precise per-stage timings or feedback scores.
 - Grafana local dashboards can display API and worker metrics. No Grafana Cloud credentials, contact points, cloud retention, or staging synthetic checks are included.
 - No raw text is intentionally exported. A serialized SDK export test and real staging outage exercise are still required before enabling LangSmith for customer traffic.
 - Owner must approve the LangSmith region/retention/DPA, telemetry retention, alert contact points, sampling/tenant opt-out, PII action default, budgets and escalation owner.

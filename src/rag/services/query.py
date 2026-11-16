@@ -120,6 +120,7 @@ class QueryService:
         tracer: LLMTracer | None = None,
         environment: str = "development",
         generation_enabled: bool = True,
+        release_version: str = "unknown",
     ) -> None:
         self._repository = repository
         self._embeddings = embeddings
@@ -138,6 +139,7 @@ class QueryService:
         self._tracer = tracer or NoOpLLMTracer()
         self._environment = environment
         self._generation_enabled = generation_enabled
+        self._release_version = release_version
         self._embedding_breaker = AsyncCircuitBreaker()
         self._generation_breaker = AsyncCircuitBreaker()
 
@@ -287,7 +289,9 @@ class QueryService:
                 "trace_id": current_trace_id() or request_id,
                 "tenant_ref": tenant_ref,
                 "environment": self._environment,
+                "release": self._release_version,
                 "model": self._generation_model,
+                "embedding_model": self._embedding_model,
                 "prompt_version": PROMPT_VERSION,
                 "input_tokens": input_tokens,
                 "output_tokens": output_tokens,
@@ -296,10 +300,7 @@ class QueryService:
                 "finish_reason": finish_reason or "unknown",
                 "cost_estimate_available": False,
                 "retrieved_chunks": json.dumps(
-                    [
-                        {"chunk_id": str(chunk.id), "score": chunk.score}
-                        for chunk in (chunks or [])
-                    ],
+                    [{"chunk_id": str(chunk.id), "score": chunk.score} for chunk in (chunks or [])],
                     separators=(",", ":"),
                 ),
                 "collection_refs": ",".join(

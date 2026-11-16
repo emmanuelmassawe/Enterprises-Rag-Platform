@@ -46,6 +46,21 @@ The local review endpoints require admin API-key scope, expose plain text only, 
 
 M4's proposed `gemini-3.8-flash`, query similarity/context thresholds, cache TTL and generation token/concurrency limits require owner confirmation. See [ADR-014](ADR/ADR-014-milestone-4-query-pipeline.md).
 
+## Milestone 5 evidence (2026-11-16)
+
+| Area | Evidence | Result |
+|---|---|---|
+| Static quality | `uv run ruff check .`; `uv run ruff format --check .`; `uv run mypy src`; `uv run lint-imports` | Passed after final source changes. |
+| Unit and red-team behavior | `uv run coverage run -m pytest -q -p no:cacheprovider --basetemp=C:/Users/EMMA/AppData/Local/Temp/rag-m5-pytest-20261116-r5`; `uv run coverage report --fail-under=80` | 103 passed; branch-aware coverage 83%, passed. An earlier run exposed a test fake without the optional Gemini `candidates` field; the adapter now handles that missing field, and the final full suite passes. |
+| Privacy and tracing | Synthetic tests verify redaction, allowlisted metadata, empty model inputs/outputs, nested LangSmith stage runs, run correlation and sampling; no provider credentials used | Provider-free tests; no external LangSmith payload or outage test was run. |
+| Security smoke | `uv run pytest -q -p no:cacheprovider tests/security` | 5 synthetic direct/indirect, Base64, Swahili, hidden Unicode and markup/canary cases passed. GNU `make` is unavailable in the Windows shell, so the Makefile recipe was run directly. Live-model ASR is not measured. |
+| Local observability | `docker compose --profile observability config --quiet`; `docker compose build api worker` | Compose configuration parsed and hardened API/worker images built. Profile services were not started; Grafana alert delivery is not verified. |
+| Load baseline | `make load-test` requires a synthetic tenant/collection and non-production API key | Not run; no staging target or credentials were provided. |
+| Dependency/security audit | `uv lock`; `uv sync --all-groups --locked`; `uv run pip-audit --skip-editable` | Lock resolves and sync succeeds; pip-audit found no known vulnerabilities. The editable project distribution was skipped by design. |
+| External services | No live Gemini, LangSmith or Grafana Cloud credentials used | Not exercised. LangSmith remains disabled by default. |
+
+M5 implementation is committed in `1798f2d`, `c070409`, and `de0abcc`; this evidence update and final tests follow those commits. Remaining owner and staging release gates are listed in [ADR-015](ADR/ADR-015-milestone-5-observability-security.md) and [AI security](AI_SECURITY.md).
+
 ## Remaining release gates
 
 - Confirm proposed `gemini-embedding-2` and 768 dimensions, account region, retention and spend limits; add a dimension-specific vector index in a new approved migration and benchmark it with tenant filters.

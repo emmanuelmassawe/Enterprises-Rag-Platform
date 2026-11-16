@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
 import uuid
 from contextlib import suppress
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, cast
 
 import structlog
@@ -22,7 +23,13 @@ EXPORT_FAILURES = Counter(
 class LangSmithTracer(LLMTracer):
     """Export bounded metadata from a worker queue; raw prompts and outputs are excluded."""
 
-    def __init__(self, api_key: str, project: str, endpoint: str | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        project: str,
+        endpoint: str | None = None,
+        sample_rate: float = 1.0,
+    ) -> None:
         self._client = Client(
             api_key=api_key,
             api_url=endpoint,
@@ -33,6 +40,7 @@ class LangSmithTracer(LLMTracer):
             timeout_ms=1_000,
         )
         self._project = project
+        self._sample_rate = sample_rate
         self._queue: asyncio.Queue[dict[str, str | int | float | bool]] = asyncio.Queue(512)
         self._task: asyncio.Task[None] | None = None
 
@@ -51,6 +59,7 @@ class LangSmithTracer(LLMTracer):
                 "environment",
                 "release",
                 "model",
+                "embedding_model",
                 "prompt_version",
                 "input_tokens",
                 "output_tokens",
@@ -63,11 +72,16 @@ class LangSmithTracer(LLMTracer):
                 "collection_refs",
             }
         }
+        if secrets.randbelow(1_000_000) >= int(self._sample_rate * 1_000_000):
+            return
         try:
             self._queue.put_nowait(safe_metadata)
+            trace_ref = str(
+                safe_metadata.get("trace_id", safe_metadata.get("request_id", "unknown"))
+            )
             run_id = uuid.uuid5(
                 uuid.NAMESPACE_URL,
-                f"enterprise-rag:{safe_metadata.get('trace_id', safe_metadata.get('request_id', 'unknown'))}",
+                f"enterprise-rag:{trace_ref}",
             )
             structlog.get_logger("tracing").info(
                 "langsmith_trace_queued",
@@ -91,6 +105,7 @@ class LangSmithTracer(LLMTracer):
 
     def _export(self, metadata: dict[str, Any]) -> None:
         now = datetime.now(UTC)
+        start_time = now - timedelta(milliseconds=int(metadata["duration_ms"]))
         request_ref = str(metadata.get("trace_id", metadata.get("request_id", "unknown")))
         root_id = uuid.uuid5(uuid.NAMESPACE_URL, f"enterprise-rag:{request_ref}")
         self._client.create_run(
@@ -100,7 +115,7 @@ class LangSmithTracer(LLMTracer):
             inputs={},
             outputs={},
             project_name=self._project,
-            start_time=now,
+            start_time=start_time,
             end_time=now,
             extra={
                 "metadata": {
@@ -110,6 +125,7 @@ class LangSmithTracer(LLMTracer):
                         "trace_id",
                         "tenant_ref",
                         "environment",
+                        "release",
                         "outcome",
                         "collection_refs",
                     )
@@ -125,7 +141,13 @@ class LangSmithTracer(LLMTracer):
         )
         for stage, run_type in stages:
             stage_id = uuid.uuid5(root_id, stage)
-            stage_metadata = {"stage": stage}
+            stage_metadata = {
+                "stage": stage,
+                "environment": metadata["environment"],
+                "release": metadata["release"],
+                "tenant_ref": metadata["tenant_ref"],
+                "duration_ms": metadata["duration_ms"],
+            }
             if stage == "generation":
                 stage_metadata.update(
                     {
@@ -140,6 +162,7 @@ class LangSmithTracer(LLMTracer):
                 )
             if stage == "retrieval":
                 stage_metadata["retrieved_chunks"] = metadata["retrieved_chunks"]
+                stage_metadata["embedding_model"] = metadata["embedding_model"]
             self._client.create_run(
                 id=stage_id,
                 parent_run_id=root_id,
@@ -151,7 +174,7 @@ class LangSmithTracer(LLMTracer):
                 inputs={},
                 outputs={},
                 project_name=self._project,
-                start_time=now,
+                start_time=start_time,
                 end_time=now,
                 extra={"metadata": stage_metadata},
             )
@@ -168,4 +191,8 @@ class LangSmithTracer(LLMTracer):
         with suppress(asyncio.CancelledError):
             await task
         self._task = None
-        await asyncio.to_thread(self._client.flush)
+        try:
+            await asyncio.wait_for(asyncio.to_thread(self._client.flush), timeout=1.25)
+        except Exception:
+            EXPORT_FAILURES.inc()
+            structlog.get_logger("tracing").warning("langsmith_flush_failed")
