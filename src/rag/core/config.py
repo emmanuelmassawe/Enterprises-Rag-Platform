@@ -79,6 +79,10 @@ class Settings(BaseSettings):
                 raise ValueError("staging and production require EMBEDDING_API_KEY")
             if self.blob_endpoint_url and not self.blob_endpoint_url.startswith("https://"):
                 raise ValueError("staging and production S3 endpoints must use HTTPS")
+            if self.langsmith_tracing and self.langsmith_api_key is None:
+                raise ValueError("LANGSMITH_TRACING requires LANGSMITH_API_KEY")
+            if self.langsmith_endpoint and not self.langsmith_endpoint.startswith("https://"):
+                raise ValueError("staging and production LangSmith endpoints must use HTTPS")
         return self
 
     @field_validator("log_level", mode="before")

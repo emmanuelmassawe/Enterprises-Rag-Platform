@@ -1,8 +1,8 @@
 """Deterministic smoke red-team cases; synthetic payloads only, no provider calls."""
 
+from rag.domain.ports.ingestion import ParsedPage
 from rag.services.ingestion import HeuristicInjectionDetector, chunk_pages
 from rag.services.query import normalize_question, sanitize_untrusted_text
-from rag.domain.ports.ingestion import ParsedPage
 
 
 def test_direct_injection_and_jailbreak_phrases_are_detected() -> None:
@@ -34,9 +34,11 @@ def test_unicode_hidden_text_is_removed_before_detection_and_provider_use() -> N
 
 
 def test_markup_images_links_and_script_payloads_are_removed() -> None:
-    unsafe = '![track](https://attacker.test/pixel) [open](https://attacker.test) <script>alert(1)</script>'
+    unsafe = (
+        "![track](https://attacker.test/pixel) [open](https://attacker.test) "
+        "<script>alert(1)</script>"
+    )
     safe = sanitize_untrusted_text(unsafe)
     assert "attacker.test" not in safe
     assert "<script>" not in safe
     assert "![" not in safe
-

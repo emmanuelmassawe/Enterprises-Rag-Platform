@@ -24,17 +24,17 @@ async def run() -> int:
     api_key = os.environ.get("RAG_LOAD_API_KEY", "")
     collection = os.environ.get("RAG_LOAD_COLLECTION_ID", "")
     if not base_url or not api_key or not collection:
-        print("Set RAG_LOAD_BASE_URL, RAG_LOAD_API_KEY, and RAG_LOAD_COLLECTION_ID.")
+        sys.stderr.write("Set RAG_LOAD_BASE_URL, RAG_LOAD_API_KEY, and RAG_LOAD_COLLECTION_ID.\n")
         return 2
     try:
         UUID(collection)
     except ValueError:
-        print("RAG_LOAD_COLLECTION_ID must be a UUID.")
+        sys.stderr.write("RAG_LOAD_COLLECTION_ID must be a UUID.\n")
         return 2
     request_count = int(os.environ.get("RAG_LOAD_REQUESTS", "100"))
     concurrency = int(os.environ.get("RAG_LOAD_CONCURRENCY", "10"))
     if not 1 <= request_count <= 100_000 or not 1 <= concurrency <= 500:
-        print("Request count must be 1..100000 and concurrency 1..500.")
+        sys.stderr.write("Request count must be 1..100000 and concurrency 1..500.\n")
         return 2
 
     durations: list[float] = []
@@ -43,6 +43,7 @@ async def run() -> int:
     timeout = httpx.Timeout(30.0, connect=3.0)
     headers = {"Authorization": f"Bearer {api_key}"}
     async with httpx.AsyncClient(timeout=timeout, headers=headers) as client:
+
         async def request_one() -> None:
             async with semaphore:
                 start = time.perf_counter()
@@ -72,9 +73,9 @@ async def run() -> int:
         "max_seconds": round(max(durations), 3),
         "mean_seconds": round(statistics.fmean(durations), 3),
     }
-    print(json.dumps(summary, sort_keys=True))
-    server_errors = sum(count for code, count in outcomes.items() if code.startswith("5"))
-    return 1 if outcomes["transport_error"] or server_errors else 0
+    sys.stdout.write(json.dumps(summary, sort_keys=True) + "\n")
+    failed = sum(count for code, count in outcomes.items() if not code.startswith("2"))
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

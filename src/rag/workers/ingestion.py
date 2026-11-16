@@ -73,9 +73,7 @@ async def startup(ctx: dict[str, Any]) -> None:
         ctx["query_cache"] = RedisQueryCache(
             settings.redis_url.get_secret_value(), settings.cache_redis_url.get_secret_value()
         )
-    metrics_server, metrics_thread = start_http_server(
-        settings.worker_metrics_port, addr="0.0.0.0"
-    )
+    metrics_server, metrics_thread = start_http_server(settings.worker_metrics_port, addr="0.0.0.0")
     ctx["metrics_server"] = metrics_server
     ctx["metrics_thread"] = metrics_thread
 
@@ -107,6 +105,27 @@ async def _invalidate_query_cache(ctx: dict[str, Any], tenant_id: UUID) -> None:
         await cast(RedisQueryCache, cache).invalidate_tenant(tenant_id)
     except Exception:
         structlog.get_logger("worker").warning("query_cache_invalidation_failed")
+
+
+async def _retry_or_dead_letter(
+    ctx: dict[str, Any],
+    repository: IngestionRepository,
+    tenant_id: UUID,
+    document_id: UUID,
+    job_id: UUID,
+    error_code: str,
+    *,
+    log_failure: bool = False,
+) -> None:
+    attempt = int(ctx.get("job_try", 1))
+    if attempt < 3:
+        await repository.set_progress(tenant_id, document_id, job_id, "queued", 20)
+        raise Retry(defer=min(30, 2**attempt + secrets.randbelow(2000) / 1000)) from None
+    if log_failure:
+        structlog.get_logger("worker").exception("ingestion_failed")
+    await repository.fail_processing(tenant_id, document_id, job_id, error_code)
+    JOB_OUTCOMES.labels("ingestion", "dead_letter").inc()
+    DEAD_LETTER_JOBS.labels("ingestion").inc()
 
 
 async def process_document(
@@ -178,24 +197,24 @@ async def process_document(
         await repository.fail_processing(tenant_uuid, document_uuid, job_uuid, str(exc))
         JOB_OUTCOMES.labels("ingestion", "rejected").inc()
     except EmbeddingProviderUnavailable:
-        attempt = int(ctx.get("job_try", 1))
-        if attempt < 3:
-            await repository.set_progress(tenant_uuid, document_uuid, job_uuid, "queued", 20)
-            raise Retry(defer=min(30, 2**attempt + secrets.randbelow(2000) / 1000)) from None
-        await repository.fail_processing(
-            tenant_uuid, document_uuid, job_uuid, "embedding_provider_unavailable"
+        await _retry_or_dead_letter(
+            ctx,
+            repository,
+            tenant_uuid,
+            document_uuid,
+            job_uuid,
+            "embedding_provider_unavailable",
         )
-        JOB_OUTCOMES.labels("ingestion", "dead_letter").inc()
-        DEAD_LETTER_JOBS.labels("ingestion").inc()
     except Exception:
-        attempt = int(ctx.get("job_try", 1))
-        if attempt < 3:
-            await repository.set_progress(tenant_uuid, document_uuid, job_uuid, "queued", 20)
-            raise Retry(defer=min(30, 2**attempt + secrets.randbelow(2000) / 1000)) from None
-        structlog.get_logger("worker").exception("ingestion_failed")
-        await repository.fail_processing(tenant_uuid, document_uuid, job_uuid, "ingestion_failed")
-        JOB_OUTCOMES.labels("ingestion", "dead_letter").inc()
-        DEAD_LETTER_JOBS.labels("ingestion").inc()
+        await _retry_or_dead_letter(
+            ctx,
+            repository,
+            tenant_uuid,
+            document_uuid,
+            job_uuid,
+            "ingestion_failed",
+            log_failure=True,
+        )
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)

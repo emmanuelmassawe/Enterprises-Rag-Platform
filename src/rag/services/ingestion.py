@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import hashlib
 import base64
 import binascii
+import hashlib
 import json
 import re
 import unicodedata
@@ -52,13 +52,17 @@ class HeuristicInjectionDetector:
 
     def is_suspicious(self, content: str) -> bool:
         candidates = [content]
-        for token in re.findall(r"(?<![A-Za-z0-9+/])[A-Za-z0-9+/]{24,}={0,2}(?![A-Za-z0-9+/])", content):
+        for token in re.findall(
+            r"(?<![A-Za-z0-9+/])[A-Za-z0-9+/]{24,}={0,2}(?![A-Za-z0-9+/])", content
+        ):
             try:
                 decoded = base64.b64decode(token, validate=True).decode("utf-8")
             except (binascii.Error, UnicodeDecodeError, ValueError):
                 continue
             candidates.append(decoded)
-        return any(pattern.search(candidate) for candidate in candidates for pattern in INJECTION_PATTERNS)
+        return any(
+            pattern.search(candidate) for candidate in candidates for pattern in INJECTION_PATTERNS
+        )
 
     def reason_codes(self, content: str) -> tuple[str, ...]:
         if not self.is_suspicious(content):

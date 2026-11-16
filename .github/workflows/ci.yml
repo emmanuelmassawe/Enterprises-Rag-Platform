@@ -4,6 +4,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    - cron: "17 2 * * *"
 
 permissions:
   contents: read
@@ -97,6 +99,9 @@ jobs:
         run: |
           uv run coverage run -m pytest
           uv run coverage report --fail-under=80
+
+      - name: AI red-team smoke suite
+        run: uv run pytest -q tests/security
 
       - name: Dependency audit
         run: uv run pip-audit --skip-editable

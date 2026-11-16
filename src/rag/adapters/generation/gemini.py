@@ -72,6 +72,12 @@ class GeminiAnswerGenerator:
         except ValidationError as exc:
             raise GenerationProviderUnavailable("generation response did not match schema") from exc
         usage = response.usage_metadata
+        candidate = response.candidates[0] if response.candidates else None
+        finish_reason = (
+            getattr(candidate.finish_reason, "name", str(candidate.finish_reason)).lower()
+            if candidate is not None and candidate.finish_reason is not None
+            else None
+        )
         return GenerationResult(
             claims=tuple(
                 GeneratedClaim(claim.text, tuple(claim.chunk_ids)) for claim in parsed.claims
@@ -81,6 +87,7 @@ class GeminiAnswerGenerator:
             output_tokens=usage.candidates_token_count
             if usage and usage.candidates_token_count
             else 0,
+            finish_reason=finish_reason,
         )
 
     async def close(self) -> None:

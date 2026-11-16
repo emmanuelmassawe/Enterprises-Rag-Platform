@@ -17,8 +17,6 @@ _CONFIGURED = False
 def configure_tracing(endpoint: str | None, service_name: str) -> None:
     """Configure a bounded batch exporter once; requests remain unaffected by outages."""
     global _CONFIGURED
-    if _CONFIGURED:
-        return
     with _LOCK:
         if _CONFIGURED:
             return

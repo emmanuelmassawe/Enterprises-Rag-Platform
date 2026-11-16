@@ -38,6 +38,7 @@ class GenerationResult:
     refusal_code: str | None
     input_tokens: int
     output_tokens: int
+    finish_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -10,6 +10,8 @@ class LLMTracer(Protocol):
 
     def record_run(self, metadata: dict[str, str | int | float | bool]) -> None: ...
 
+    async def close(self) -> None: ...
+
 
 class NoOpLLMTracer:
     """Safe default when external tracing is disabled."""

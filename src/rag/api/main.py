@@ -15,9 +15,9 @@ import structlog
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
@@ -105,9 +105,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                 logger = logger.bind(trace_id=request.state.trace_id)
                 response = await call_next(request)
                 route = request.scope.get("route")
-                span.set_attribute(
-                    "http.route", getattr(route, "path", "unmatched")
-                )
+                span.set_attribute("http.route", getattr(route, "path", "unmatched"))
                 span.set_attribute("http.response.status_code", response.status_code)
                 if response.status_code >= 500:
                     span.set_status(Status(StatusCode.ERROR))

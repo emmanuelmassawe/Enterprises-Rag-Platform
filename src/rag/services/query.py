@@ -11,6 +11,9 @@ import unicodedata
 from dataclasses import asdict, replace
 from uuid import UUID
 
+from prometheus_client import Counter, Histogram
+
+from rag.core.telemetry import current_trace_id
 from rag.domain.ports.ingestion import InjectionDetector
 from rag.domain.ports.query import (
     AnswerGenerator,
@@ -26,8 +29,6 @@ from rag.domain.ports.query import (
 )
 from rag.domain.ports.tracing import LLMTracer, NoOpLLMTracer
 from rag.prompts.query_v1 import PROMPT_VERSION, SYSTEM_INSTRUCTION
-from rag.core.telemetry import current_trace_id
-from prometheus_client import Counter, Histogram
 from rag.security.events import emit_canary_leak, emit_security_event
 from rag.security.privacy import contains_sensitive, redact_text
 from rag.services.resilience import AsyncCircuitBreaker
@@ -38,9 +39,7 @@ MARKDOWN_IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 MARKDOWN_LINK = re.compile(r"\[([^\]]+)\]\((?:[^()]|\([^)]*\))*\)")
 HTML_TAG = re.compile(r"<[^>]*>")
 URL = re.compile(r"(?i)\b(?:https?://|www\.)\S+")
-QUERY_OUTCOMES = Counter(
-    "rag_query_requests_total", "Terminal query outcomes", ["outcome"]
-)
+QUERY_OUTCOMES = Counter("rag_query_requests_total", "Terminal query outcomes", ["outcome"])
 QUERY_DURATION = Histogram("rag_query_duration_seconds", "Query use-case duration")
 
 
@@ -156,28 +155,11 @@ class QueryService:
         conversation_id: UUID | None = None,
     ) -> QueryResultRecord:
         started = time.perf_counter()
-        normalized_question = normalize_question(question)
-        if contains_sensitive(normalized_question):
-            emit_security_event(
-                "sensitive_input",
-                self._input_pii_action,
-                tenant_id=str(tenant_id),
-                key_id=str(key_id),
-                request_id=request_id,
-            )
-            if self._input_pii_action == "block":
-                result = self._refusal(
-                    "sensitive_input_blocked",
-                    "Remove personal or credential information and try again.",
-                    request_id,
-                )
-                await self._record(
-                    tenant_id, key_id, request_id, "[REDACTED]", result, 0, 0, started
-                )
-                self._trace_run(request_id, tenant_id, "blocked", 0, 0, started)
-                return result
-            if self._input_pii_action == "redact":
-                normalized_question = redact_text(normalized_question)
+        normalized_question, input_refusal = await self._apply_input_policy(
+            question, tenant_id, key_id, request_id, started
+        )
+        if input_refusal is not None:
+            return input_refusal
         if filters.keys() - ALLOWED_FILTERS:
             raise QueryValidationError("unsupported_filter")
         use_cache = self._cache is not None and not debug and conversation_id is None
@@ -234,7 +216,8 @@ class QueryService:
         if not self._generation_enabled:
             result = self._refusal(
                 "generation_disabled",
-                "Answer generation is temporarily disabled. Retrieved sources are available for review.",
+                "Answer generation is temporarily disabled. "
+                "Retrieved sources are available for review.",
                 request_id,
             )
             await self._record(
@@ -242,7 +225,7 @@ class QueryService:
             )
             self._trace_run(request_id, tenant_id, "generation_disabled", 0, 0, started)
             return result
-        result, input_tokens, output_tokens = await self._generate_result(
+        result, input_tokens, output_tokens, finish_reason = await self._generate_result(
             normalized_question, selected, request_id, str(tenant_id), str(key_id)
         )
         if debug:
@@ -266,8 +249,15 @@ class QueryService:
             started,
         )
         self._trace_run(
-            request_id, tenant_id, "refused" if result.refusal else "answered",
-            input_tokens, output_tokens, started,
+            request_id,
+            tenant_id,
+            "refused" if result.refusal else "answered",
+            input_tokens,
+            output_tokens,
+            started,
+            chunks=selected,
+            collection_ids=collection_ids,
+            finish_reason=finish_reason,
         )
         if use_cache and result.refusal is None:
             await self._cache_set(tenant_id, cache_key, result)
@@ -281,6 +271,10 @@ class QueryService:
         input_tokens: int,
         output_tokens: int,
         started: float,
+        *,
+        chunks: list[RetrievedChunk] | None = None,
+        collection_ids: list[UUID] | None = None,
+        finish_reason: str | None = None,
     ) -> None:
         """Queue content-free run metadata; tracer failures cannot delay the answer."""
         duration = max(0, time.perf_counter() - started)
@@ -299,8 +293,50 @@ class QueryService:
                 "output_tokens": output_tokens,
                 "duration_ms": int(duration * 1000),
                 "outcome": outcome,
+                "finish_reason": finish_reason or "unknown",
+                "cost_estimate_available": False,
+                "retrieved_chunks": json.dumps(
+                    [
+                        {"chunk_id": str(chunk.id), "score": chunk.score}
+                        for chunk in (chunks or [])
+                    ],
+                    separators=(",", ":"),
+                ),
+                "collection_refs": ",".join(
+                    hashlib.sha256(str(item).encode()).hexdigest()[:16]
+                    for item in (collection_ids or [])
+                ),
             }
         )
+
+    async def _apply_input_policy(
+        self,
+        question: str,
+        tenant_id: UUID,
+        key_id: UUID,
+        request_id: str,
+        started: float,
+    ) -> tuple[str, QueryResultRecord | None]:
+        normalized = normalize_question(question)
+        if not contains_sensitive(normalized):
+            return normalized, None
+        emit_security_event(
+            "sensitive_input",
+            self._input_pii_action,
+            tenant_id=str(tenant_id),
+            key_id=str(key_id),
+            request_id=request_id,
+        )
+        if self._input_pii_action == "block":
+            result = self._refusal(
+                "sensitive_input_blocked",
+                "Remove personal or credential information and try again.",
+                request_id,
+            )
+            await self._record(tenant_id, key_id, request_id, "[REDACTED]", result, 0, 0, started)
+            self._trace_run(request_id, tenant_id, "blocked", 0, 0, started)
+            return normalized, result
+        return (redact_text(normalized) if self._input_pii_action == "redact" else normalized), None
 
     async def _try_cached(
         self,
@@ -359,7 +395,7 @@ class QueryService:
         request_id: str,
         tenant_id: str,
         key_id: str,
-    ) -> tuple[QueryResultRecord, int, int]:
+    ) -> tuple[QueryResultRecord, int, int, str | None]:
         boundary = self._boundary(question, chunks)
         user_content = self._user_content(question, chunks, boundary)
         try:
@@ -388,9 +424,7 @@ class QueryService:
         else:
             joined_output = "\n".join(claim.text for claim in generated.claims)
             if self._canary_token in joined_output:
-                emit_canary_leak(
-                    tenant_id=tenant_id, key_id=key_id, request_id=request_id
-                )
+                emit_canary_leak(tenant_id=tenant_id, key_id=key_id, request_id=request_id)
                 result = self._refusal(
                     "output_scan_blocked",
                     "The generated answer was blocked by a safety check.",
@@ -415,7 +449,7 @@ class QueryService:
                 )
             else:
                 result = self._validated_result(generated, chunks, request_id)
-        return result, generated.input_tokens, generated.output_tokens
+        return result, generated.input_tokens, generated.output_tokens, generated.finish_reason
 
     def _cache_key(
         self,

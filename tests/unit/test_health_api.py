@@ -17,6 +17,19 @@ def test_healthz_reports_liveness_without_dependencies() -> None:
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
     assert response.headers["x-request-id"].startswith("req_")
+    assert len(response.headers["x-trace-id"]) == 32
+
+
+def test_req_fr_sta_002_redaction_correlation() -> None:
+    client = TestClient(create_app(Settings(app_env="test", metrics_scrape_token="a" * 32)))
+
+    response = client.get("/healthz", headers={"X-Request-ID": "req-correlation"})
+    metrics = client.get("/metrics", headers={"Authorization": f"Bearer {'a' * 32}"})
+
+    assert response.headers["x-request-id"] == "req-correlation"
+    assert len(response.headers["x-trace-id"]) == 32
+    assert "request_id=" not in metrics.text
+    assert 'trace_id="' not in metrics.text
 
 
 def test_readyz_reports_missing_dependencies_as_not_ready() -> None:
