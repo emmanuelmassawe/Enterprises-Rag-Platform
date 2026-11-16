@@ -21,6 +21,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 
 from rag.api.routers.api_keys import router as api_keys_router
 from rag.api.routers.documents import router as documents_router
+from rag.api.routers.query import router as query_router
 from rag.core.config import Settings, get_settings
 from rag.core.errors import ProblemException
 from rag.core.logging import configure_logging
@@ -202,6 +203,8 @@ def create_app(
     ingestion_repository: Any | None = None,
     blob_store: Any | None = None,
     ingestion_queue: Any | None = None,
+    query_service: Any | None = None,
+    query_cache: Any | None = None,
     clock: Callable[[], float] = time.time,
 ) -> FastAPI:
     """Create an HTTP adapter with application ports supplied by the composition root."""
@@ -235,6 +238,7 @@ def create_app(
     app.add_middleware(RequestContextMiddleware)
     app.include_router(api_keys_router)
     app.include_router(documents_router)
+    app.include_router(query_router)
     app.state.settings = resolved
     app.state.database_probe = runtime.database_probe
     app.state.rate_limiter = runtime.rate_limiter
@@ -244,6 +248,8 @@ def create_app(
     app.state.ingestion_repository = ingestion_repository
     app.state.blob_store = blob_store
     app.state.ingestion_queue = ingestion_queue
+    app.state.query_service = query_service
+    app.state.query_cache = query_cache
     app.state.clock = clock
     _register_error_handlers(app)
 

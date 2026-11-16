@@ -289,6 +289,7 @@ class QueryLog(TenantRow, Base):
     )
 
     key_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    request_id: Mapped[str | None] = mapped_column(String(128))
     question: Mapped[str] = mapped_column(Text, nullable=False)
     retrieved_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, server_default="[]")
     latency_ms: Mapped[int | None] = mapped_column(Integer)

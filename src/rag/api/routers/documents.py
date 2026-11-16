@@ -534,6 +534,12 @@ async def decide_quarantine(
         ) from exc
     if status == "not_found":
         raise ProblemException(404, "not_found", "Not found", "Quarantine item was not found.")
+    cache = getattr(request.app.state, "query_cache", None)
+    if cache is not None and status == "recorded":
+        try:
+            await cache.invalidate_tenant(principal.tenant_id)
+        except Exception:
+            structlog.get_logger("query_cache").warning("query_cache_invalidation_failed")
     decision_record = cast(dict[str, object], result)
     return {
         "chunk_id": str(chunk_id),

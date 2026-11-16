@@ -5,7 +5,7 @@ Only the human owner ticks these boxes. The coding agent must not start a milest
 - [ tick ] Milestone 0: Phase 0 design approved (requirements FR/NFR, API design + `api/openapi.yaml`, architecture + ADRs)
 - [ tick ] Milestone 1: Repo scaffold, tooling, CI skeleton, health endpoints, Docker, docker-compose
 - [ tick ] Milestone 2: DB schema, migrations, RLS, repositories, auth, rate limiting
-- [ ] Milestone 3: Ingestion pipeline (parsers, chunking, embeddings, worker, jobs API, Redis queue)
+- [ tick ] Milestone 3: Ingestion pipeline (parsers, chunking, embeddings, worker, jobs API, Redis queue)
 - [ ] Milestone 4: Retrieval, generation, citations, streaming, guardrails, caching
 - [ ] Milestone 5: Observability (LangSmith, Grafana instrumentation), resilience, AI security layer, red-team suite
 - [ ] Milestone 6: Evaluation harness and golden dataset

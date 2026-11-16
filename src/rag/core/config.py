@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     database_url: SecretStr | None = None
     migration_database_url: SecretStr | None = None
     redis_url: SecretStr | None = None
+    cache_redis_url: SecretStr | None = None
     blob_backend: Literal["local", "s3"] = "local"
     blob_local_root: str = Field(
         default_factory=lambda: str(Path(gettempdir()) / "enterprise-rag-blobs")
@@ -45,6 +46,13 @@ class Settings(BaseSettings):
     embedding_model: str = Field(default="gemini-embedding-2", min_length=1, max_length=100)
     embedding_dimensions: int = Field(default=768, ge=128, le=3072)
     embedding_timeout_seconds: float = Field(default=20.0, ge=1.0, le=120.0)
+    generation_model: str = Field(default="gemini-3.8-flash", min_length=1, max_length=100)
+    generation_timeout_seconds: float = Field(default=20.0, ge=1.0, le=120.0)
+    generation_max_output_tokens: int = Field(default=1024, ge=64, le=8192)
+    generation_max_concurrency: int = Field(default=8, ge=1, le=64)
+    query_context_token_budget: int = Field(default=6000, ge=256, le=32_000)
+    query_minimum_similarity: float = Field(default=0.35, ge=0.0, le=1.0)
+    query_cache_ttl_seconds: int = Field(default=300, ge=1, le=86_400)
     rate_limit_requests: int = Field(default=60, ge=1, le=100_000)
     rate_limit_window_seconds: int = Field(default=60, ge=1, le=86_400)
     rate_limit_memory_fallback_requests: int = Field(default=10, ge=1, le=10_000)
@@ -75,6 +83,7 @@ class Settings(BaseSettings):
         "database_url",
         "migration_database_url",
         "redis_url",
+        "cache_redis_url",
         "embedding_api_key",
         "blob_access_key_id",
         "blob_secret_access_key",

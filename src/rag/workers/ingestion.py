@@ -18,6 +18,7 @@ from rag.adapters.blob.s3 import S3BlobStore
 from rag.adapters.embeddings.gemini import EmbeddingProviderUnavailable, GeminiEmbeddings
 from rag.adapters.pdf.parser import PdfRejected, parse_pdf
 from rag.adapters.postgres.ingestion import PostgresIngestionRepository
+from rag.adapters.redis.query_cache import RedisQueryCache
 from rag.core.config import get_settings
 from rag.db.session import Database
 from rag.domain.ports.ingestion import BlobStore, IngestionRepository
@@ -61,6 +62,10 @@ async def startup(ctx: dict[str, Any]) -> None:
         settings.embedding_dimensions,
         settings.embedding_timeout_seconds,
     )
+    if settings.cache_redis_url is not None:
+        ctx["query_cache"] = RedisQueryCache(
+            settings.redis_url.get_secret_value(), settings.cache_redis_url.get_secret_value()
+        )
 
 
 async def shutdown(ctx: dict[str, Any]) -> None:
@@ -70,6 +75,9 @@ async def shutdown(ctx: dict[str, Any]) -> None:
     database = ctx.get("database")
     if database is not None:
         await cast(Database, database).dispose()
+    cache = ctx.get("query_cache")
+    if cache is not None:
+        await cast(RedisQueryCache, cache).close()
 
 
 async def process_document(
@@ -126,6 +134,12 @@ async def process_document(
         await repository.finish_processing(
             tenant_uuid, document_uuid, job_uuid, chunks, vectors, len(pages)
         )
+        cache = ctx.get("query_cache")
+        if cache is not None:
+            try:
+                await cast(RedisQueryCache, cache).invalidate_tenant(tenant_uuid)
+            except Exception:
+                structlog.get_logger("worker").warning("query_cache_invalidation_failed")
         structlog.get_logger("worker").info(
             "ingestion_completed",
             tenant_id=str(tenant_uuid),
@@ -171,6 +185,12 @@ async def process_delete(
         if storage_key:
             await blob_store.delete(storage_key)
         await repository.finish_deletion(tenant_uuid, document_uuid, job_uuid)
+        cache = ctx.get("query_cache")
+        if cache is not None:
+            try:
+                await cast(RedisQueryCache, cache).invalidate_tenant(tenant_uuid)
+            except Exception:
+                structlog.get_logger("worker").warning("query_cache_invalidation_failed")
         structlog.get_logger("worker").info(
             "document_deletion_completed",
             tenant_id=tenant_id,
