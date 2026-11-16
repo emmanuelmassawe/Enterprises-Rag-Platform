@@ -1,6 +1,6 @@
 # Enterprise RAG Platform
 
-Foundation for a multi-tenant document question-answering service. The current implementation provides the FastAPI process, PostgreSQL schema with tenant RLS, hashed API-key authentication, Redis-backed rate limiting and ingestion jobs, protected metrics, health routes, private PDF ingestion, page-aware chunking, Gemini embeddings, quarantine review, and a local API/worker container workflow. Retrieval, answer generation, and the web UI arrive in later milestones.
+Foundation for a multi-tenant document question-answering service. The current implementation provides the FastAPI process, PostgreSQL schema with tenant RLS, hashed API-key authentication, Redis-backed rate limiting and ingestion jobs, protected metrics, health routes, private PDF ingestion, page-aware chunking, Gemini embeddings, quarantine review, and a local API/worker container workflow. Milestone 4 adds tenant-scoped hybrid retrieval, guarded Gemini answers, citation validation, SSE and a versioned answer cache. The web UI remains a later milestone.
 
 ## Contents
 
@@ -28,6 +28,11 @@ flowchart LR
   Worker --> DB
   Worker --> Blob
   Worker --> Gemini[Gemini embeddings]
+  API --> Query[Hybrid query + citation checks]
+  Query --> DB
+  Query --> GeminiAnswer[Gemini structured output]
+  Query --> Cache[(Tenant-versioned Redis cache)]
+  API --> SSE[/POST /v1/query: JSON or SSE/]
   API --> Health[/healthz + /readyz/]
   API --> Metrics[Protected /metrics]
 ```
@@ -60,6 +65,7 @@ In another terminal, `make smoke` checks liveness and readiness. Or run `docker 
 | `DATABASE_URL` | Compose local runtime URL | Runtime Postgres connection using a non-owner role. |
 | `MIGRATION_DATABASE_URL` | Compose local migration URL | Privileged one-off migration connection; never used by API request handling. |
 | `REDIS_URL` | Compose local `state` URL | Redis control-state connection for distributed rate limits (`noeviction`). |
+| `CACHE_REDIS_URL` | Compose local `cache` URL | Evictable query response payloads; tenant epochs remain in `state`. |
 | `RATE_LIMIT_REQUESTS` | `60` | Per API key fixed-window request limit. |
 | `RATE_LIMIT_WINDOW_SECONDS` | `60` | Shared rate-limit window length. |
 | `RATE_LIMIT_MEMORY_FALLBACK_REQUESTS` | `10` | Stricter per-process limit used if Redis is unavailable. |
@@ -73,9 +79,13 @@ In another terminal, `make smoke` checks liveness and readiness. Or run `docker 
 | `INGESTION_CHUNK_CHARS`, `INGESTION_CHUNK_OVERLAP_CHARS` | `2400`, `300` | Deterministic page-aware chunk sizes. |
 | `EMBEDDING_API_KEY` | unset | Gemini API secret; required by the worker outside test/local startup. |
 | `EMBEDDING_MODEL`, `EMBEDDING_DIMENSIONS`, `EMBEDDING_TIMEOUT_SECONDS` | `gemini-embedding-2`, `768`, `20` | Proposed embedding defaults; confirm with owner before production. |
+| `GENERATION_MODEL`, `GENERATION_TIMEOUT_SECONDS` | `gemini-3.8-flash`, `20` | Proposed Gemini generation model and provider timeout; owner confirmation required. |
+| `GENERATION_MAX_OUTPUT_TOKENS`, `GENERATION_MAX_CONCURRENCY` | `1024`, `8` | Bounded answer output and concurrent generation calls. |
+| `QUERY_CONTEXT_TOKEN_BUDGET`, `QUERY_MINIMUM_SIMILARITY` | `6000`, `0.35` | Proposed context and dense-retrieval thresholds; confirm with owner and evaluate. |
+| `QUERY_CACHE_TTL_SECONDS` | `300` | Maximum successful answer-cache lifetime; tenant epoch invalidates changed knowledge bases. |
 Copy `.env.example` to `.env` for local changes. Never commit `.env`.
 
-Compose also runs the separate `cache` Redis service with a 128 MiB cap and `allkeys-lru`, matching the approved state/cache split. The ingestion worker uses only `state`. Local uploads and worker downloads use temporary space capped at 256 MiB; production ingress should also enforce the upload request-body limit.
+Compose runs the separate `cache` Redis service with a 128 MiB cap and `allkeys-lru`. Query payloads use `cache`; tenant invalidation epochs use `state`. Local uploads and worker downloads use temporary space capped at 256 MiB; production ingress should also enforce the upload request-body limit.
 
 ## Tooling
 

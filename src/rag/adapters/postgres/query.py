@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from uuid import UUID
+from collections.abc import Mapping
+from typing import cast
+from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
-from uuid import uuid4
+from sqlalchemy.sql import Select
 
 from rag.adapters.postgres.models import Chunk, Document, QueryLog
 from rag.db.session import Database
@@ -20,10 +22,17 @@ class PostgresQueryRepository:
         self._embedding_dimensions = embedding_dimensions
 
     @staticmethod
-    def _base(tenant_id: UUID, collection_ids: list[UUID], filters: dict[str, object]):
+    def _base(
+        tenant_id: UUID,
+        collection_ids: list[UUID],
+        filters: Mapping[str, str | int | float | bool],
+    ) -> Select[Chunk, str]:
         statement = (
             select(Chunk, Document.name)
-            .join(Document, (Document.id == Chunk.document_id) & (Document.tenant_id == Chunk.tenant_id))
+            .join(
+                Document,
+                (Document.id == Chunk.document_id) & (Document.tenant_id == Chunk.tenant_id),
+            )
             .where(
                 Chunk.tenant_id == tenant_id,
                 Chunk.collection_id.in_(collection_ids),
@@ -38,37 +47,63 @@ class PostgresQueryRepository:
 
     @staticmethod
     def _to_chunk(chunk: Chunk, filename: str, score: float) -> RetrievedChunk:
-        return RetrievedChunk(chunk.id, chunk.document_id, filename, chunk.page, chunk.section, chunk.content, score)
+        return RetrievedChunk(
+            chunk.id, chunk.document_id, filename, chunk.page, chunk.section, chunk.content, score
+        )
 
     async def dense_search(
-        self, tenant_id: UUID, collection_ids: list[UUID], vector: list[float],
-        filters: dict[str, str | int | float | bool], limit: int, minimum_similarity: float,
+        self,
+        tenant_id: UUID,
+        collection_ids: list[UUID],
+        vector: list[float],
+        filters: dict[str, str | int | float | bool],
+        limit: int,
+        minimum_similarity: float,
     ) -> list[RetrievedChunk]:
         async with self._database.tenant_session(tenant_id) as session:
             distance = Chunk.embedding.cosine_distance(vector).label("distance")
-            statement = self._base(tenant_id, collection_ids, filters).where(
-                Chunk.embedding.is_not(None),
-                Chunk.embedding_dimensions == self._embedding_dimensions,
-            ).add_columns(distance).order_by(distance).limit(limit)
+            statement = (
+                self._base(tenant_id, collection_ids, filters)
+                .where(
+                    Chunk.embedding.is_not(None),
+                    Chunk.embedding_dimensions == self._embedding_dimensions,
+                )
+                .add_columns(distance)
+                .order_by(distance)
+                .limit(limit)
+            )
             rows = (await session.execute(statement)).all()
-            return [
-                self._to_chunk(chunk, filename, max(0.0, 1.0 - float(distance_value)))
-                for chunk, filename, distance_value in rows
-                if 1.0 - float(distance_value) >= minimum_similarity
-            ]
+            result: list[RetrievedChunk] = []
+            for row in rows:
+                chunk, filename, distance_value = cast(tuple[Chunk, str, float], row)
+                similarity = 1.0 - distance_value
+                if similarity >= minimum_similarity:
+                    result.append(self._to_chunk(chunk, filename, max(0.0, similarity)))
+            return result
 
     async def full_text_search(
-        self, tenant_id: UUID, collection_ids: list[UUID], question: str,
-        filters: dict[str, str | int | float | bool], limit: int,
+        self,
+        tenant_id: UUID,
+        collection_ids: list[UUID],
+        question: str,
+        filters: dict[str, str | int | float | bool],
+        limit: int,
     ) -> list[RetrievedChunk]:
         async with self._database.tenant_session(tenant_id) as session:
             query = func.plainto_tsquery("english", question)
             rank = func.ts_rank_cd(Chunk.search_vector, query).label("rank")
-            statement = self._base(tenant_id, collection_ids, filters).where(
-                Chunk.search_vector.op("@@")(query)
-            ).add_columns(rank).order_by(rank.desc()).limit(limit)
+            statement = (
+                self._base(tenant_id, collection_ids, filters)
+                .where(Chunk.search_vector.op("@@")(query))
+                .add_columns(rank)
+                .order_by(rank.desc())
+                .limit(limit)
+            )
             rows = (await session.execute(statement)).all()
-            return [self._to_chunk(chunk, filename, float(rank_value)) for chunk, filename, rank_value in rows]
+            return [
+                self._to_chunk(chunk, filename, float(rank_value))
+                for chunk, filename, rank_value in cast(list[tuple[Chunk, str, float]], rows)
+            ]
 
     async def get_eligible_chunks(
         self, tenant_id: UUID, collection_ids: list[UUID], chunk_ids: list[UUID]
@@ -78,15 +113,33 @@ class PostgresQueryRepository:
         async with self._database.tenant_session(tenant_id) as session:
             statement = self._base(tenant_id, collection_ids, {}).where(Chunk.id.in_(chunk_ids))
             rows = (await session.execute(statement)).all()
-            return [self._to_chunk(chunk, filename, 0.0) for chunk, filename in rows]
+            return [
+                self._to_chunk(chunk, filename, 0.0)
+                for chunk, filename in cast(list[tuple[Chunk, str]], rows)
+            ]
 
     async def record_query(
-        self, tenant_id: UUID, key_id: UUID, request_id: str, question: str,
-        chunk_ids: list[str], latency_ms: int, input_tokens: int, output_tokens: int,
+        self,
+        tenant_id: UUID,
+        key_id: UUID,
+        request_id: str,
+        question: str,
+        chunk_ids: list[str],
+        latency_ms: int,
+        input_tokens: int,
+        output_tokens: int,
     ) -> None:
         async with self._database.tenant_session(tenant_id, key_id) as session:
-            session.add(QueryLog(
-                id=uuid4(), tenant_id=tenant_id, key_id=key_id, request_id=request_id,
-                question=question, retrieved_ids=chunk_ids, latency_ms=latency_ms,
-                input_tokens=input_tokens, output_tokens=output_tokens,
-            ))
+            session.add(
+                QueryLog(
+                    id=uuid4(),
+                    tenant_id=tenant_id,
+                    key_id=key_id,
+                    request_id=request_id,
+                    question=question,
+                    retrieved_ids=chunk_ids,
+                    latency_ms=latency_ms,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                )
+            )

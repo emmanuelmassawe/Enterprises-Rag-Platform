@@ -8,6 +8,7 @@
 | Chunk | Bounded text segment derived from a document, with source/page metadata and embedding. |
 | Embedding | Numeric vector representing text for semantic similarity retrieval. |
 | Hybrid retrieval | Dense vector search plus PostgreSQL full-text search, merged by Reciprocal Rank Fusion (RRF). |
+| RRF | Reciprocal Rank Fusion: merges ranked result lists using reciprocal rank contributions. |
 | Citation | Verifiable reference to a retrieved chunk and its source document/page or section. |
 | Groundedness | Degree to which generated claims are supported by retrieved evidence. |
 | Refusal | Safe response that evidence or policy does not support an answer. |
@@ -28,4 +29,5 @@
 | LangSmith run ID | Identifier of a LangSmith trace/run, if export is enabled and succeeds. |
 | `rag-state` | Redis-compatible store for queue/control/quota state using no-eviction semantics. |
 | `rag-cache` | Redis-compatible cache store with eviction allowed; cache loss must not affect correctness. |
+| Query cache epoch | Tenant-scoped counter in `rag-state`; advancing it makes prior tenant answer-cache keys unreachable. |
 

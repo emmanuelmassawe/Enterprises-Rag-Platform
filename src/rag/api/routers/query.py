@@ -16,8 +16,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from rag.api.dependencies import require_scope
 from rag.core.errors import ProblemException
 from rag.domain.auth import Principal, Role, Scope
-from rag.domain.ports.query import QueryResultRecord
-from rag.services.query import QueryService, QueryUnavailable, QueryValidationError
+from rag.domain.ports.query import (
+    QueryApplication,
+    QueryResultRecord,
+    QueryUnavailable,
+    QueryValidationError,
+)
 
 router = APIRouter(prefix="/v1", tags=["Query"])
 
@@ -59,11 +63,13 @@ class QueryOutput(BaseModel):
     retrieval_debug: dict[str, object] | None = None
 
 
-def _service(request: Request) -> QueryService:
+def _service(request: Request) -> QueryApplication:
     service = getattr(request.app.state, "query_service", None)
     if service is None:
-        raise ProblemException(503, "dependency_unavailable", "Unavailable", "Query service is not configured.")
-    return cast(QueryService, service)
+        raise ProblemException(
+            503, "dependency_unavailable", "Unavailable", "Query service is not configured."
+        )
+    return cast(QueryApplication, service)
 
 
 def _output(result: QueryResultRecord, include_debug: bool) -> QueryOutput:
@@ -71,8 +77,11 @@ def _output(result: QueryResultRecord, include_debug: bool) -> QueryOutput:
         answer=result.answer,
         citations=[CitationOutput(**asdict(citation)) for citation in result.citations],
         refusal=result.refusal,
-        usage={"input_tokens": result.input_tokens, "output_tokens": result.output_tokens,
-               "estimated_cost_usd": result.estimated_cost_usd},
+        usage={
+            "input_tokens": result.input_tokens,
+            "output_tokens": result.output_tokens,
+            "estimated_cost_usd": result.estimated_cost_usd,
+        },
         request_id=result.request_id,
         retrieval_debug=result.retrieval_debug if include_debug else None,
     )
@@ -80,11 +89,12 @@ def _output(result: QueryResultRecord, include_debug: bool) -> QueryOutput:
 
 def _event(name: str, request_id: str, **payload: object) -> bytes:
     data = {"contract_version": "rag.query.v1", "request_id": request_id, **payload}
-    return f"event: {name}\ndata: {json.dumps(data, ensure_ascii=True, separators=(',', ':'))}\n\n".encode()
+    encoded = json.dumps(data, ensure_ascii=True, separators=(",", ":"))
+    return f"event: {name}\ndata: {encoded}\n\n".encode()
 
 
 async def _run_query(
-    request: Request, body: QueryInput, principal: Principal, service: QueryService
+    request: Request, body: QueryInput, principal: Principal, service: QueryApplication
 ) -> QueryResultRecord:
     try:
         return await service.answer(
@@ -99,9 +109,17 @@ async def _run_query(
             conversation_id=body.conversation_id,
         )
     except QueryValidationError as exc:
-        raise ProblemException(422, str(exc), "Invalid query", "The query request is invalid.") from exc
+        raise ProblemException(
+            422, str(exc), "Invalid query", "The query request is invalid."
+        ) from exc
     except QueryUnavailable as exc:
-        raise ProblemException(503, "query_unavailable", "Query unavailable", "The query could not be completed.", {"Retry-After": "5"}) from exc
+        raise ProblemException(
+            503,
+            "query_unavailable",
+            "Query unavailable",
+            "The query could not be completed.",
+            {"Retry-After": "5"},
+        ) from exc
 
 
 @router.post("/query", response_model=None)
@@ -109,7 +127,7 @@ async def query(
     body: QueryInput,
     request: Request,
     principal: Annotated[Principal, Depends(require_scope(Scope.READ))],
-    service: Annotated[QueryService, Depends(_service)],
+    service: Annotated[QueryApplication, Depends(_service)],
 ) -> object:
     """Answer from tenant-authorized collection evidence."""
     if not body.stream:
@@ -118,31 +136,57 @@ async def query(
 
     async def events() -> AsyncIterator[bytes]:
         request_id = request.state.request_id
-        yield _event("retrieval_started", request_id, collection_ids=[str(item) for item in body.collection_ids])
+        yield _event(
+            "retrieval_started",
+            request_id,
+            collection_ids=[str(item) for item in body.collection_ids],
+        )
         try:
             result = await _run_query(request, body, principal, service)
             output = _output(result, body.debug and principal.role == Role.ADMIN)
-            yield _event("citations", request_id, citations=[item.model_dump() for item in output.citations])
+            yield _event(
+                "citations", request_id, citations=[item.model_dump() for item in output.citations]
+            )
             if result.refusal is not None:
                 yield _event("refusal", request_id, refusal=result.refusal)
             else:
-                sequence = 0
-                # Full response is validated before emission; pieces remain provisional per contract.
-                for offset in range(0, len(result.answer), 128):
+                # The validated response is emitted in provisional pieces per the contract.
+                for sequence, offset in enumerate(range(0, len(result.answer), 128), start=1):
                     if await request.is_disconnected():
                         return
-                    sequence += 1
-                    yield _event("token", request_id, text=result.answer[offset:offset + 128], sequence=sequence)
+                    yield _event(
+                        "token",
+                        request_id,
+                        text=result.answer[offset : offset + 128],
+                        sequence=sequence,
+                    )
                     await asyncio.sleep(0)
             yield _event("done", request_id, usage=output.usage)
         except ProblemException as exc:
-            yield _event("error", request_id, problem={"status": exc.status, "code": exc.code,
-                                                         "title": exc.title, "detail": exc.detail})
+            yield _event(
+                "error",
+                request_id,
+                problem={
+                    "status": exc.status,
+                    "code": exc.code,
+                    "title": exc.title,
+                    "detail": exc.detail,
+                },
+            )
         except Exception:
-            yield _event("error", request_id, problem={"status": 503, "code": "query_unavailable",
-                                                         "title": "Query unavailable", "detail": "The query could not be completed."})
+            yield _event(
+                "error",
+                request_id,
+                problem={
+                    "status": 503,
+                    "code": "query_unavailable",
+                    "title": "Query unavailable",
+                    "detail": "The query could not be completed.",
+                },
+            )
 
     return StreamingResponse(
-        events(), media_type="text/event-stream",
+        events(),
+        media_type="text/event-stream",
         headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
     )

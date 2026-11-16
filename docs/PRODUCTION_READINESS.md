@@ -30,6 +30,19 @@ This file records completed checks and unresolved release gates. Passing a local
 
 The local review endpoints require admin API-key scope, expose plain text only, and record an idempotent decision with actor, reason, and tenant identity. The heuristic scanner is only triage; it is not a safety guarantee. Production data must not be sent to Gemini until the proposed model, dimension, region, retention and spend limits are confirmed.
 
+## Milestone 4 evidence (2026-11-16)
+
+| Area | Evidence | Result |
+|---|---|---|
+| Static quality | Ruff, strict mypy, import-linter, API contract lint | Pending final run. |
+| Query behavior | RRF, refusal, citation validation, sanitization, cache fallback and tenant epoch tests | Pending final run. |
+| Database migration | Additive `query_logs.request_id` migration, upgrade and populated DB compatibility | Pending local database run. |
+| Provider integration | No live Gemini key or production data used | Not exercised; only deterministic tests. |
+| Performance | No model-pinned staging environment/load test available in M4 | Not measured; full generation completes before first answer event, so the proposed TTFT SLO remains at risk. |
+| API stream | Event sequence and terminal state contract | Pending SSE API tests. |
+
+M4's proposed `gemini-3.8-flash`, query similarity/context thresholds, cache TTL and generation token/concurrency limits require owner confirmation. See [ADR-014](ADR/ADR-014-milestone-4-query-pipeline.md).
+
 ## Remaining release gates
 
 - Confirm proposed `gemini-embedding-2` and 768 dimensions, account region, retention and spend limits; add a dimension-specific vector index in a new approved migration and benchmark it with tenant filters.

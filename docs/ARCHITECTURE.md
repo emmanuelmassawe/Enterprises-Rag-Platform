@@ -1,6 +1,6 @@
 # Architecture
 
-Status: Phase 0 design approved; Milestone 2 implementation map. This file describes the intended full system and identifies M2's delivered pieces; later milestone components are planned until marked implemented.
+Status: Phase 0 design approved; Milestones 2-4 implementation map. M4 implements the query API, hybrid retrieval, guarded generation, citation checks, SSE and tenant-versioned response cache. M5+ components remain planned.
 
 ## Context and containers
 
@@ -41,21 +41,22 @@ flowchart LR
 1. Validate user/session/API key, tenant, collection ACL, quota, query size and conversation access.
 2. Check tenant/ACL/model/prompt/index-version cache; revalidate citation eligibility before a cache hit.
 3. Run dense vector and PostgreSQL FTS retrieval in RLS/ACL scope, merge with RRF; optional reranker is behind a port and enabled only when evaluation justifies it.
-4. Assemble bounded context with per-request delimiters; send no tools, secrets or cross-tenant data to the pinned Gemini model.
-5. Validate structured response, citation chunk membership, groundedness and output safety. Refuse if evidence is insufficient. Stream SSE; persist only agreed conversation/query fields.
-6. Export redacted trace asynchronously to LangSmith and platform telemetry through OTel/Alloy to Grafana Cloud. Export failure must not hold up user response.
+4. Assemble bounded context with per-request random delimiters; send no tools, secrets or cross-tenant data to the proposed Gemini model.
+5. Validate structured claims, citation chunk membership and output safety. Refuse if retrieval is empty or generated claims fail validation. Store request, token counts and retrieved chunk IDs in the tenant-scoped query audit table.
+6. Emit `rag.query.v1` events in contract order: retrieval started, verified citations, validated answer chunks or refusal, then one terminal event. Generation completes before answer chunks are emitted to preserve citation validity; TTFT needs staging measurement.
+7. M5 will add redacted trace export to LangSmith and platform telemetry through OTel/Alloy to Grafana Cloud. These exports are not wired in M4.
 
 ```mermaid
 flowchart TD
   Req[Question + selected collections] --> Auth[Auth, role, tenant, quota]
   Auth --> RLS[Transaction tenant context + Postgres RLS]
   RLS --> Cache{Versioned tenant/ACL cache?}
-  Cache -->|hit| Verify[Revalidate citation eligibility]
+  Cache -->|hit| Verify[Revalidate citation eligibility under RLS]
   Cache -->|miss| Dense[pgvector search]
   Cache -->|miss| FTS[Postgres FTS]
   Dense --> RRF[RRF and optional evaluated reranker]
   FTS --> RRF
-  RRF --> Pack[ACL-filtered bounded context]
+  RRF --> Pack[Collection-filtered bounded context]
   Pack --> Prompt[Delimited untrusted evidence; no tools]
   Prompt --> LLM[Gemini provider port]
   LLM --> Guard[Schema, citations, groundedness, output scan]
@@ -63,7 +64,7 @@ flowchart TD
   Guard -->|pass| Stream
   Guard -->|fail| Refuse[Refusal or safe error]
   Refuse --> Stream
-  Stream --> Persist[Conversation / usage]
+  Stream --> Persist[Query audit / token usage]
   Stream -. redacted async .-> Trace[LangSmith]
   Stream --> Metrics[OTel -> Alloy -> Grafana]
 ```
@@ -99,7 +100,24 @@ flowchart LR
   Cache --> TTL[Every key TTL + tenant/ACL/model/prompt/index versions]
 ```
 
-Queue writes fail visibly when memory is full; ingestion endpoint returns retryable 503 and queue alerts fire. Cache outage is fail-open and increments a metric. Redis keys are tenant-scoped; no cached answer is shared across ACL contexts. The actual memory plan and maximum queue retention are capacity decisions for implementation.
+Queue writes fail visibly when memory is full; ingestion endpoint returns retryable 503 and queue alerts fire. Query cache outage is fail-open. Cache payloads carry TTL, model/prompt/config version, tenant ID and a tenant epoch; hits revalidate cited chunks against ready documents and permitted quarantine states. Ingestion completion, document deletion and quarantine decisions increment the epoch in `rag-state`. Redis keys are tenant-scoped; no cached answer is shared across tenants. Cache hit/failure metrics and circuit breakers remain future observability/resilience work.
+
+### Milestone 4 query implementation
+
+The live query path is `src/rag/api/routers/query.py` → `QueryService` → tenant-bound Postgres repository and Gemini provider ports. It uses dense cosine and English FTS search, reciprocal-rank fusion, a bounded context, structured claims and strict citation ID membership. The Redis adapter separates epochs from evictable response payloads. Conversation IDs are accepted but history is not read or written in M4. See [ADR-014](ADR/ADR-014-milestone-4-query-pipeline.md) for proposed defaults, model choice, streaming tradeoff, provider references and open verification gates.
+
+### NFR to architectural decision mapping
+
+| NFR | Satisfying decision/component | Verification |
+|---|---|---|
+| NFR-PERF-001/002 | ADR-001 pgvector/FTS; ADR-003 RRF; ADR-008 bounded provider calls; ADR-014 candidate cap, context/output limits and async calls | Staging p95 retrieval/TTFT/full answer load test; no M4 performance claim until measured |
+| NFR-AI-001 | ADR-003 hybrid retrieval; ADR-008 evidence-grounded no-tool generation; ADR-014 minimum cosine threshold, RRF and insufficient-evidence refusal | M6 golden-set recall and refusal evaluation |
+| NFR-AI-002 | ADR-008 structured generation; ADR-014 claim citation IDs validated against retrieved chunks before response | Invalid citation unit and contract tests |
+| NFR-SEC-001/003 | ADR-007 forced RLS plus explicit tenant/collection filters; ADR-014 eligibility rules for ready and clear/approved chunks | Postgres RLS integration checks and cross-tenant query tests |
+| NFR-PRIV-001 | ADR-011 planned redaction/export policy; ADR-014 query data remains in tenant-scoped DB/cache and is not exported to observability providers | Audit/cache scope tests and M5 export redaction tests |
+| NFR-REL-001 | ADR-004 durable state separated from ADR-014 evictable cache; cache read/write failure falls through to query path | Redis fault tests and cache invalidation tests |
+| NFR-OPS-001 | ADR-014 bounded provider timeout, max output tokens, context size and request top-k | Timeout/error tests and staging capacity verification |
+| NFR-MAINT-001/TEST-001 | ADR-014 query ports isolate Postgres, Gemini and Redis adapters; API layer depends only on the query port | import-linter, strict mypy, port-contract tests and >=80% coverage |
 
 ## Observability and privacy
 

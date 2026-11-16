@@ -7,6 +7,14 @@ from typing import Protocol
 from uuid import UUID
 
 
+class QueryUnavailable(RuntimeError):
+    """A required retrieval, embedding, audit, or generation dependency failed."""
+
+
+class QueryValidationError(ValueError):
+    """The request cannot be safely or unambiguously processed."""
+
+
 @dataclass(frozen=True, slots=True)
 class RetrievedChunk:
     id: UUID
@@ -102,9 +110,7 @@ class QueryEmbeddingProvider(Protocol):
 class AnswerGenerator(Protocol):
     """Generate strict, citation-bearing claims from bounded evidence."""
 
-    async def generate(
-        self, system_instruction: str, user_content: str
-    ) -> GenerationResult: ...
+    async def generate(self, system_instruction: str, user_content: str) -> GenerationResult: ...
 
     async def close(self) -> None: ...
 
@@ -119,3 +125,21 @@ class QueryCache(Protocol):
     ) -> None: ...
 
     async def invalidate_tenant(self, tenant_id: UUID) -> None: ...
+
+
+class QueryApplication(Protocol):
+    """Application use case consumed by the HTTP adapter."""
+
+    async def answer(
+        self,
+        *,
+        tenant_id: UUID,
+        key_id: UUID,
+        request_id: str,
+        question: str,
+        collection_ids: list[UUID],
+        top_k: int,
+        filters: dict[str, str | int | float | bool],
+        debug: bool = False,
+        conversation_id: UUID | None = None,
+    ) -> QueryResultRecord: ...

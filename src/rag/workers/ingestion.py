@@ -80,6 +80,16 @@ async def shutdown(ctx: dict[str, Any]) -> None:
         await cast(RedisQueryCache, cache).close()
 
 
+async def _invalidate_query_cache(ctx: dict[str, Any], tenant_id: UUID) -> None:
+    cache = ctx.get("query_cache")
+    if cache is None:
+        return
+    try:
+        await cast(RedisQueryCache, cache).invalidate_tenant(tenant_id)
+    except Exception:
+        structlog.get_logger("worker").warning("query_cache_invalidation_failed")
+
+
 async def process_document(
     ctx: dict[str, Any], tenant_id: str, document_id: str, job_id: str
 ) -> None:
@@ -134,12 +144,7 @@ async def process_document(
         await repository.finish_processing(
             tenant_uuid, document_uuid, job_uuid, chunks, vectors, len(pages)
         )
-        cache = ctx.get("query_cache")
-        if cache is not None:
-            try:
-                await cast(RedisQueryCache, cache).invalidate_tenant(tenant_uuid)
-            except Exception:
-                structlog.get_logger("worker").warning("query_cache_invalidation_failed")
+        await _invalidate_query_cache(ctx, tenant_uuid)
         structlog.get_logger("worker").info(
             "ingestion_completed",
             tenant_id=str(tenant_uuid),
@@ -185,12 +190,7 @@ async def process_delete(
         if storage_key:
             await blob_store.delete(storage_key)
         await repository.finish_deletion(tenant_uuid, document_uuid, job_uuid)
-        cache = ctx.get("query_cache")
-        if cache is not None:
-            try:
-                await cast(RedisQueryCache, cache).invalidate_tenant(tenant_uuid)
-            except Exception:
-                structlog.get_logger("worker").warning("query_cache_invalidation_failed")
+        await _invalidate_query_cache(ctx, tenant_uuid)
         structlog.get_logger("worker").info(
             "document_deletion_completed",
             tenant_id=tenant_id,

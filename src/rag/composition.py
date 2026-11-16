@@ -4,21 +4,20 @@ from __future__ import annotations
 
 from rag.adapters.blob.local import LocalBlobStore
 from rag.adapters.blob.s3 import S3BlobStore
+from rag.adapters.embeddings.gemini import GeminiEmbeddings
+from rag.adapters.generation.gemini import GeminiAnswerGenerator
 from rag.adapters.postgres.api_keys import PostgresApiKeyStore
 from rag.adapters.postgres.ingestion import PostgresIngestionRepository
 from rag.adapters.postgres.query import PostgresQueryRepository
-from rag.adapters.redis.query_cache import RedisQueryCache
 from rag.adapters.redis.ingestion_queue import ArqIngestionQueue
+from rag.adapters.redis.query_cache import RedisQueryCache
 from rag.adapters.redis.rate_limiter import FallbackRateLimiter, MemoryRateLimiter, RedisRateLimiter
-from rag.adapters.embeddings.gemini import GeminiEmbeddings
-from rag.adapters.generation.gemini import GeminiAnswerGenerator
 from rag.api.main import create_app
 from rag.core.config import get_settings
 from rag.db.session import Database
 from rag.domain.ports.ingestion import BlobStore
 from rag.services.api_keys import ApiKeyService
-from rag.services.ingestion import IngestionService
-from rag.services.ingestion import HeuristicInjectionDetector
+from rag.services.ingestion import HeuristicInjectionDetector, IngestionService
 from rag.services.query import QueryService
 
 settings = get_settings()
@@ -76,22 +75,28 @@ rate_limiter = FallbackRateLimiter(
     settings.rate_limit_memory_fallback_window_seconds,
 )
 query_cache = (
-    RedisQueryCache(settings.redis_url.get_secret_value(), settings.cache_redis_url.get_secret_value())
+    RedisQueryCache(
+        settings.redis_url.get_secret_value(), settings.cache_redis_url.get_secret_value()
+    )
     if settings.redis_url is not None and settings.cache_redis_url is not None
     else None
 )
 query_embeddings = (
     GeminiEmbeddings(
-        settings.embedding_api_key.get_secret_value(), settings.embedding_model,
-        settings.embedding_dimensions, settings.embedding_timeout_seconds,
+        settings.embedding_api_key.get_secret_value(),
+        settings.embedding_model,
+        settings.embedding_dimensions,
+        settings.embedding_timeout_seconds,
     )
     if settings.embedding_api_key is not None and database is not None
     else None
 )
 answer_generator = (
     GeminiAnswerGenerator(
-        settings.embedding_api_key.get_secret_value(), settings.generation_model,
-        settings.generation_timeout_seconds, settings.generation_max_output_tokens,
+        settings.embedding_api_key.get_secret_value(),
+        settings.generation_model,
+        settings.generation_timeout_seconds,
+        settings.generation_max_output_tokens,
         settings.generation_max_concurrency,
     )
     if settings.embedding_api_key is not None and database is not None
@@ -99,10 +104,15 @@ answer_generator = (
 )
 query_service = (
     QueryService(
-        PostgresQueryRepository(database, settings.embedding_dimensions), query_embeddings,
-        answer_generator, query_cache, HeuristicInjectionDetector(),
-        embedding_model=settings.embedding_model, embedding_dimensions=settings.embedding_dimensions,
-        generation_model=settings.generation_model, minimum_similarity=settings.query_minimum_similarity,
+        PostgresQueryRepository(database, settings.embedding_dimensions),
+        query_embeddings,
+        answer_generator,
+        query_cache,
+        HeuristicInjectionDetector(),
+        embedding_model=settings.embedding_model,
+        embedding_dimensions=settings.embedding_dimensions,
+        generation_model=settings.generation_model,
+        minimum_similarity=settings.query_minimum_similarity,
         context_token_budget=settings.query_context_token_budget,
         max_output_tokens=settings.generation_max_output_tokens,
         cache_ttl_seconds=settings.query_cache_ttl_seconds,

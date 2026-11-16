@@ -7,6 +7,7 @@ services:
       LOG_LEVEL: INFO
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://rag_runtime@db:5432/enterprise_rag}
       REDIS_URL: ${REDIS_URL:-redis://state:6379/0}
+      CACHE_REDIS_URL: ${CACHE_REDIS_URL:-redis://cache:6379/0}
       BLOB_BACKEND: ${BLOB_BACKEND:-local}
       BLOB_LOCAL_ROOT: /var/lib/rag/blobs
       BLOB_BUCKET: ${BLOB_BUCKET:-enterprise-rag-local}
@@ -24,6 +25,13 @@ services:
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-gemini-embedding-2}
       EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-768}
       EMBEDDING_TIMEOUT_SECONDS: ${EMBEDDING_TIMEOUT_SECONDS:-20}
+      GENERATION_MODEL: ${GENERATION_MODEL:-gemini-3.8-flash}
+      GENERATION_TIMEOUT_SECONDS: ${GENERATION_TIMEOUT_SECONDS:-20}
+      GENERATION_MAX_OUTPUT_TOKENS: ${GENERATION_MAX_OUTPUT_TOKENS:-1024}
+      GENERATION_MAX_CONCURRENCY: ${GENERATION_MAX_CONCURRENCY:-8}
+      QUERY_CONTEXT_TOKEN_BUDGET: ${QUERY_CONTEXT_TOKEN_BUDGET:-6000}
+      QUERY_MINIMUM_SIMILARITY: ${QUERY_MINIMUM_SIMILARITY:-0.35}
+      QUERY_CACHE_TTL_SECONDS: ${QUERY_CACHE_TTL_SECONDS:-300}
       METRICS_SCRAPE_TOKEN: ${METRICS_SCRAPE_TOKEN:-}
       RATE_LIMIT_REQUESTS: ${RATE_LIMIT_REQUESTS:-60}
       RATE_LIMIT_WINDOW_SECONDS: ${RATE_LIMIT_WINDOW_SECONDS:-60}
@@ -46,6 +54,8 @@ services:
         condition: service_healthy
       state:
         condition: service_healthy
+      cache:
+        condition: service_healthy
     networks:
       - default
       - backend
@@ -65,6 +75,7 @@ services:
       LOG_LEVEL: INFO
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://rag_runtime@db:5432/enterprise_rag}
       REDIS_URL: ${REDIS_URL:-redis://state:6379/0}
+      CACHE_REDIS_URL: ${CACHE_REDIS_URL:-redis://cache:6379/0}
       BLOB_BACKEND: ${BLOB_BACKEND:-local}
       BLOB_LOCAL_ROOT: /var/lib/rag/blobs
       BLOB_BUCKET: ${BLOB_BUCKET:-enterprise-rag-local}
@@ -96,6 +107,8 @@ services:
       db:
         condition: service_healthy
       state:
+        condition: service_healthy
+      cache:
         condition: service_healthy
     networks:
       - backend
