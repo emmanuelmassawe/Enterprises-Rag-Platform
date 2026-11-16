@@ -150,12 +150,6 @@ class Chunk(TenantRow, Base):
         ),
         Index("ix_chunks_fts", "search_vector", postgresql_using="gin"),
         Index("ix_chunks_metadata", "metadata", postgresql_using="gin"),
-        Index(
-            "ix_chunks_embedding_hnsw",
-            "embedding",
-            postgresql_using="hnsw",
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-        ),
         Index("ix_chunks_tenant_collection", "tenant_id", "collection_id"),
     )
 

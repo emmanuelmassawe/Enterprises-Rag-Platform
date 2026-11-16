@@ -229,14 +229,6 @@ def upgrade() -> None:
         sa.UniqueConstraint("tenant_id", "id", name="uq_chunks_tenant_id_id"),
     )
     op.create_index(
-        "ix_chunks_embedding_hnsw",
-        "chunks",
-        ["embedding"],
-        unique=False,
-        postgresql_using="hnsw",
-        postgresql_ops={"embedding": "vector_cosine_ops"},
-    )
-    op.create_index(
         "ix_chunks_fts", "chunks", ["search_vector"], unique=False, postgresql_using="gin"
     )
     op.create_index(
@@ -370,6 +362,8 @@ def upgrade() -> None:
             f"USING ({tenant_expression}) WITH CHECK ({tenant_expression})"
         )
 
+    op.execute("REVOKE CREATE ON SCHEMA public FROM PUBLIC")
+    op.execute("REVOKE CREATE ON SCHEMA public FROM rag_runtime")
     op.execute("GRANT USAGE ON SCHEMA public TO rag_runtime")
     op.execute(
         "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "
@@ -403,12 +397,6 @@ def downgrade() -> None:
     op.drop_index("ix_chunks_tenant_collection", table_name="chunks")
     op.drop_index("ix_chunks_metadata", table_name="chunks", postgresql_using="gin")
     op.drop_index("ix_chunks_fts", table_name="chunks", postgresql_using="gin")
-    op.drop_index(
-        "ix_chunks_embedding_hnsw",
-        table_name="chunks",
-        postgresql_using="hnsw",
-        postgresql_ops={"embedding": "vector_cosine_ops"},
-    )
     op.drop_table("chunks")
     op.drop_index("ix_documents_tenant_collection_created", table_name="documents")
     op.drop_table("documents")

@@ -7,13 +7,14 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
 from rag.adapters.redis.rate_limiter import MemoryRateLimiter
 from rag.api.main import create_app
 from rag.core.config import Settings
-from rag.domain.auth import ApiKeyRecord, IdempotencyConflict, Scope
-from rag.services.api_keys import ApiKeyService
+from rag.domain.auth import ApiKeyRecord, IdempotencyConflict, InvalidCredential, Scope
+from rag.services.api_keys import ApiKeyService, parse_token
 
 
 class FakeKeyStore:
@@ -122,6 +123,11 @@ def test_req_fr_auth_001_api_key_is_hashed_and_returned_once() -> None:
     )
     assert replay.status_code == 409
     assert len(store.records) == 2
+
+
+def test_req_fr_auth_001_malformed_non_ascii_secret_is_rejected_cleanly() -> None:
+    with pytest.raises(InvalidCredential):
+        parse_token(f"rag.{uuid4()}.{uuid4()}.{'é' * 40}")
 
 
 def test_req_fr_auth_001_invalid_and_insufficient_credentials_are_denied() -> None:

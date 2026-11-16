@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import re
 import secrets
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
@@ -20,12 +21,17 @@ from rag.domain.auth import (
 from rag.domain.ports.api_keys import ApiKeyStore
 
 API_KEY_FORMAT_PREFIX = "rag"
+API_KEY_SECRET_PATTERN = re.compile(r"^[A-Za-z0-9_-]{32,}$")
 
 
 def parse_token(token: str) -> ApiKeyCredentials:
     """Parse `rag.<tenant UUID>.<key UUID>.<random secret>` without trusting it."""
     parts = token.split(".", maxsplit=3)
-    if len(parts) != 4 or parts[0] != API_KEY_FORMAT_PREFIX or len(parts[3]) < 32:
+    if (
+        len(parts) != 4
+        or parts[0] != API_KEY_FORMAT_PREFIX
+        or API_KEY_SECRET_PATTERN.fullmatch(parts[3]) is None
+    ):
         raise InvalidCredential("invalid bearer credential")
     try:
         return ApiKeyCredentials(UUID(parts[1]), UUID(parts[2]), parts[3])

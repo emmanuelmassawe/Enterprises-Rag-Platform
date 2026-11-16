@@ -6,7 +6,7 @@
 
 ## Decision
 
-- Use SQLAlchemy's async engine with `asyncpg`, Alembic-managed schema migrations, and the `pgvector` SQLAlchemy type. Keep the embedding column un-sized until the owner selects an embedding model and dimension. PostgreSQL uses a stored English `tsvector`, a GIN index, JSONB metadata, and an HNSW cosine index. HNSW parameters remain PostgreSQL defaults pending measured query plans and retrieval evaluation.
+- Use SQLAlchemy's async engine with `asyncpg`, Alembic-managed schema migrations, and the `pgvector` SQLAlchemy type. Keep the embedding column un-sized and un-indexed until the owner selects an embedding model and dimension. PostgreSQL uses a stored English `tsvector`, a GIN index, and JSONB metadata index. PostgreSQL rejects an HNSW vector index without a declared dimension; add the cosine index with a new approved migration after the model decision and measured query plans.
 - Create tenant-bound DB transactions that set `app.tenant_id` transaction-locally. The schema migration enables and forces RLS for each tenant-bearing table, applies matching `USING` and `WITH CHECK` predicates, and grants table operations to `rag_runtime`. Migrations use a separate `rag_migrator` role. The runtime role is not a superuser and does not have `BYPASSRLS`.
 - Store API-key hashes only. Return a new raw credential only in its issuance response. Key creation requires a tenant-scoped idempotency key; because raw credentials cannot be recovered after creation, a repeated request returns a stable `409 idempotency_conflict` instead of reconstructing the original response. Expired idempotency rows are removed in bounded batches during new key issuance.
 - Use Redis `INCR` plus expiry in one Lua operation for tenant/key-scoped fixed-window rate limits. On Redis failure, apply a bounded, stricter in-process limit and increment `rag_rate_limit_fallback_total`. The fallback is per process and therefore cannot guarantee aggregate limits across replicas; readiness reports the shared limiter as fallback/unavailable.
@@ -14,7 +14,7 @@
 
 ## Consequences
 
-- No dimension-specific vector index is declared until the embedding model decision is approved. Query-plan and HNSW tuning must be measured before production readiness.
+- No dimension-specific vector index is declared until the embedding model decision is approved. Query-plan and HNSW tuning must be measured before production readiness. Initial migration verification found PostgreSQL rejects an HNSW index on an unconstrained vector column, so the index was removed rather than guessing a dimension.
 - Local database bootstrap/first-tenant provisioning is an operational prerequisite for the admin API and must use the dedicated migration/provisioning credentials.
 - Same-key API-key retries cannot return a second copy of the one-time secret. Clients must securely persist the original response and must not retry after losing it without a new idempotency key and owner reconciliation.
 - Process-local rate limiting is a controlled degradation mode only; it weakens global enforcement during Redis outages. Alerting and rate-limit policy remain required in later observability work.

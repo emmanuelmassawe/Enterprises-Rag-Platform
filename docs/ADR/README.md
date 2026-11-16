@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-Status: proposed decisions for Phase 0 review. Approval of Phase 0 is required before implementation.
+Status: ADR-001 through ADR-011 were approved with Phase 0. ADR-012 records the Milestone 2 implementation and is proposed for owner review at the Milestone 2 gate.
 
 | ADR | Decision |
 |---|---|

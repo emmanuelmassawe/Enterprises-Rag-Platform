@@ -1,6 +1,6 @@
 # Architecture
 
-Status: initial Phase 0 design proposal; pending owner approval. No service implementation is included in this milestone.
+Status: Phase 0 design approved; Milestone 2 implementation map. This file describes the intended full system and identifies M2's delivered pieces; later milestone components are planned until marked implemented.
 
 ## Context and containers
 
@@ -83,7 +83,9 @@ flowchart LR
 
 ## Data and tenancy
 
-Core records: tenants, users/identity links, hashed API keys, collections, documents, chunks/embeddings, jobs, conversations/messages, feedback, usage/query metadata and audit events. Tenant and user ownership are explicit. RLS is enabled on tenant-bearing tables, with policies using transaction-local tenant and principal settings. Connection pooling must reset context on transaction completion. Queries also include explicit tenant/ACL filters for performance and defense in depth. Migrations run under a separate role. HNSW/FTS plans must be benchmarked with tenant/ACL predicates; pgvector documents that approximate index filters can reduce returned matches, so iterative scans or partition/index design require measured tuning.
+Core records: tenants, users/identity links, hashed API keys, collections, documents, chunks/embeddings, jobs, conversations/messages, feedback, usage/query metadata and audit events. The initial schema implements tenants, users, API keys, idempotency records, collections, documents, chunks, jobs, conversations, messages and query logs. Tenant and user ownership are explicit. RLS is enabled and forced on all 11 tenant-bearing tables; policies use transaction-local `app.tenant_id`. Connection context is scoped to one database transaction. Queries also include explicit tenant filters for performance and defense in depth. Migrations run under a separate role. The vector column intentionally has no declared dimension or HNSW index pending the embedding-model decision; add a measured index in a future owner-approved migration. FTS uses a stored English `tsvector` and GIN index. pgvector documents that approximate index filters can reduce returned matches, so iterative scans or partition/index design require measured tuning.
+
+The runtime database role cannot bypass RLS or alter schema. The local Compose bootstrap uses the separate migration role to create the first tenant and admin key; the API process never receives that privileged URL. The plaintext key is returned once on the operator terminal and the database stores only its SHA-256 digest.
 
 Deletion is an asynchronous operation covering blob, DB rows/chunks/vectors, versioned caches, query-derived records and applicable telemetry deletion/retention. External telemetry must retain only opaque IDs needed for correlation, and the feasibility/timing of provider trace deletion must be confirmed before production.
 
@@ -140,13 +142,13 @@ See [ADR index](ADR/README.md). Main deliberate trade-offs: REST/SSE is simpler 
 
 | NFR IDs | Decisions/components that address it | Trade-off / evidence still required |
 |---|---|---|
-| PERF-001/002, SCALE-001/002 | ADR-001 Postgres/pgvector + FTS; ADR-003 hybrid retrieval; ADR-004 worker/queue; ADR-006 Redis split | Load test and query plan tuning required; thresholds proposed. |
+| PERF-001/002, SCALE-001/002 | ADR-001 Postgres/pgvector + FTS; ADR-003 hybrid retrieval; ADR-004 worker/queue; ADR-006 Redis split; ADR-012 un-sized vector column pending model selection | Load test and query plan tuning required; thresholds proposed; HNSW index awaits approved embedding dimension. |
 | AVAIL-001, REL-001, OPS-001 | ADR-002 REST/jobs; ADR-004 queue; ADR-010 Render health-gated deployment; timeouts, bounded retries, circuit breakers | Provider outages excluded from latency target; verify failover/rollback. |
 | DR-001, DATA-001 | ADR-001 Postgres source of truth; ADR-004 persisted state queue; ADR-005 external blob store; deletion operation | Must run restore and cascade drill; blob backup and retention open. |
-| SEC-001..003, AI-001/002 | ADR-007 RLS; ADR-008 no-tool guarded RAG; ADR-009 BFF; ADR-011 redacted telemetry | RLS and red-team tests required; no design alone proves zero leakage. |
+| SEC-001..003, AI-001/002 | ADR-007 RLS; ADR-008 no-tool guarded RAG; ADR-009 BFF; ADR-011 redacted telemetry; ADR-012 forced RLS, role split, hashed API keys | Local RLS role smoke passed; CI repeats tenant visibility checks. Red-team tests remain required; no design alone proves zero leakage. |
 | PRIV-001 | ADR-011 telemetry minimization; ADR-005 data lifecycle; BFF identity separation | Retention/provider deletion terms need owner confirmation. |
 | A11Y-001, UX-001, COMP-001 | ADR-009 Next.js UI and EN/SW localization; WCAG target in NFR | Browser/assistive tech tests required. |
-| MAINT-001, TEST-001, PORT-001 | Hexagonal layering, ports, adapter contract tests, OpenAPI source of truth | Static analysis and contract coverage required. |
+| MAINT-001, TEST-001, PORT-001 | Hexagonal layering, ports, Postgres/Redis adapters, adapter contract tests, OpenAPI source of truth; ADR-012 | M2 static checks and 85% unit coverage passed; full adapter contract coverage and performance verification remain. |
 | OBS-001 | ADR-011 OTel/Alloy/Grafana and optional LangSmith | Staging alert exercise and redaction proof required. |
 | COST-001 | ADR-008 bounded model/context/token use; quotas, usage accounting, kill switch | Owner budgets absent; provider prices can change. |
 
