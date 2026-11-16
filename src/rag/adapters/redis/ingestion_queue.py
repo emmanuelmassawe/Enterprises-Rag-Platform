@@ -21,9 +21,15 @@ class ArqIngestionQueue:
         return self._pool
 
     async def enqueue(self, tenant_id: UUID, document_id: UUID, job_id: UUID) -> None:
+        await self._enqueue("process_document", tenant_id, document_id, job_id)
+
+    async def enqueue_delete(self, tenant_id: UUID, document_id: UUID, job_id: UUID) -> None:
+        await self._enqueue("process_delete", tenant_id, document_id, job_id)
+
+    async def _enqueue(self, function: str, tenant_id: UUID, document_id: UUID, job_id: UUID) -> None:
         pool = await self._connection()
         await pool.enqueue_job(
-            "process_document",
+            function,
             str(tenant_id),
             str(document_id),
             str(job_id),

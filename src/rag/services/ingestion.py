@@ -13,10 +13,13 @@ from uuid import UUID, uuid4
 from rag.domain.ports.ingestion import (
     BlobStore,
     IngestionChunk,
+    IngestionApplication,
     IngestionRepository,
     ParsedPage,
     QueueBackend,
     QueueCapacityExceeded,
+    QueueUnavailable,
+    UploadRejected,
 )
 
 INJECTION_PATTERNS = (
@@ -24,14 +27,6 @@ INJECTION_PATTERNS = (
     re.compile(r"\b(system prompt|developer message|secret key|api key)\b", re.I),
     re.compile(r"\b(reveal|exfiltrate|print|show) (the )?(hidden|system|secret)\b", re.I),
 )
-
-
-class UploadRejected(ValueError):
-    """Upload violates its media, size, or metadata contract."""
-
-
-class QueueUnavailable(RuntimeError):
-    """The durable ingestion queue cannot currently accept a job."""
 
 
 def normalize_extracted_text(value: str) -> str:
@@ -90,7 +85,7 @@ def _chunk(ordinal: int, content: str, page: int) -> IngestionChunk:
     )
 
 
-class IngestionService:
+class IngestionService(IngestionApplication):
     """Coordinate a streamed upload, tenant persistence, and deterministic queue job."""
 
     def __init__(
@@ -133,8 +128,8 @@ class IngestionService:
             ).encode()
         ).hexdigest()
         document_id, job_id = uuid4(), uuid4()
-        await self.blob_store.put(storage_key, source)
         try:
+            await self.blob_store.put(storage_key, source)
             result = await self.repository.create_upload(
                 tenant_id,
                 collection_id,

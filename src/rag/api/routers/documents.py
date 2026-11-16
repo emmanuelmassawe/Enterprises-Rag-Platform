@@ -15,8 +15,14 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from rag.core.errors import ProblemException
 from rag.domain.auth import IdempotencyConflict, Principal, Scope
-from rag.domain.ports.ingestion import BlobStore, IngestionRepository, QueueBackend
-from rag.services.ingestion import IngestionService, QueueUnavailable, UploadRejected
+from rag.domain.ports.ingestion import (
+    BlobStore,
+    IngestionApplication,
+    IngestionRepository,
+    QueueBackend,
+    QueueUnavailable,
+    UploadRejected,
+)
 from rag.api.dependencies import require_scope
 
 router = APIRouter(prefix="/v1", tags=["Documents", "Jobs"])
@@ -25,11 +31,11 @@ METADATA_KEYS = {"source", "department", "category", "tags"}
 UPLOAD_CHUNK_SIZE = 1024 * 1024
 
 
-def _service(request: Request) -> IngestionService:
+def _service(request: Request) -> IngestionApplication:
     service = getattr(request.app.state, "ingestion_service", None)
     if service is None:
         raise ProblemException(503, "dependency_unavailable", "Unavailable", "Ingestion is not configured.")
-    return cast(IngestionService, service)
+    return cast(IngestionApplication, service)
 
 
 def _repository(request: Request) -> IngestionRepository:
@@ -168,6 +174,33 @@ async def get_document(
     return document
 
 
+@router.delete("/documents/{document_id}", status_code=202, operation_id="deleteDocument")
+async def delete_document(
+    request: Request,
+    document_id: UUID,
+    principal: Annotated[Principal, Depends(require_scope(Scope.WRITE))],
+) -> dict[str, object]:
+    job_id = await _repository(request).queue_delete(principal.tenant_id, document_id)
+    if job_id is None:
+        document = await _repository(request).get_document(principal.tenant_id, document_id)
+        if document is None:
+            raise ProblemException(404, "not_found", "Not found", "Document was not found.")
+        return {"operation_id": str(document_id), "status": "completed", "request_id": request.state.request_id}
+    job = await _repository(request).get_job(principal.tenant_id, job_id)
+    if job is None:
+        raise ProblemException(503, "ingestion_unavailable", "Service unavailable", "The deletion job could not be read back.")
+    try:
+        await _queue(request).enqueue_delete(principal.tenant_id, document_id, job_id)
+    except Exception as exc:
+        raise ProblemException(503, "queue_unavailable", "Service unavailable", "The deletion queue cannot accept work.", {"Retry-After": "5"}) from exc
+    return {
+        "operation_id": str(job_id),
+        "job_id": str(job_id),
+        "status": "accepted" if job["status"] == "queued" else "processing",
+        "request_id": request.state.request_id,
+    }
+
+
 @router.get("/jobs/{job_id}", operation_id="getJob")
 async def get_job(
     request: Request,
@@ -178,6 +211,27 @@ async def get_job(
     if job is None:
         raise ProblemException(404, "not_found", "Not found", "Job was not found.")
     job.pop("document_id", None)
+    job.pop("kind", None)
+    return job
+
+
+@router.delete("/jobs/{job_id}", status_code=202, operation_id="cancelJob")
+async def cancel_job(
+    request: Request,
+    job_id: UUID,
+    principal: Annotated[Principal, Depends(require_scope(Scope.WRITE))],
+) -> dict[str, object]:
+    cancelled = await _repository(request).cancel_job(principal.tenant_id, job_id)
+    if cancelled is None:
+        job = await _repository(request).get_job(principal.tenant_id, job_id)
+        if job is None:
+            raise ProblemException(404, "not_found", "Not found", "Job was not found.")
+        raise ProblemException(409, "job_not_cancellable", "Conflict", "Only queued jobs can be cancelled.")
+    job = await _repository(request).get_job(principal.tenant_id, job_id)
+    if job is None:
+        raise ProblemException(404, "not_found", "Not found", "Job was not found.")
+    job.pop("document_id", None)
+    job.pop("kind", None)
     return job
 
 
@@ -195,8 +249,12 @@ async def retry_job(
         raise ProblemException(503, "ingestion_unavailable", "Service unavailable", "The retry job could not be read back.")
     document_id = cast(UUID, job["document_id"])
     try:
-        await _queue(request).enqueue(principal.tenant_id, document_id, new_job_id)
+        if job.get("kind") == "delete":
+            await _queue(request).enqueue_delete(principal.tenant_id, document_id, new_job_id)
+        else:
+            await _queue(request).enqueue(principal.tenant_id, document_id, new_job_id)
     except Exception as exc:
         raise ProblemException(503, "queue_unavailable", "Service unavailable", "The ingestion queue cannot accept work.", {"Retry-After": "5"}) from exc
     job.pop("document_id", None)
+    job.pop("kind", None)
     return job

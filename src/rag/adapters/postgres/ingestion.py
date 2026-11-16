@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
-from pgvector.sqlalchemy import VECTOR
 from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 
@@ -35,8 +34,12 @@ def _document(row: Document) -> dict[str, object]:
 class PostgresIngestionRepository:
     """RLS-bound SQL operations with idempotent job/document creation."""
 
-    def __init__(self, database: Database) -> None:
+    def __init__(
+        self, database: Database, embedding_model: str = "gemini-embedding-2", dimensions: int = 768
+    ) -> None:
         self._database = database
+        self._embedding_model = embedding_model
+        self._embedding_dimensions = dimensions
 
     async def create_upload(
         self,
@@ -58,16 +61,6 @@ class PostgresIngestionRepository:
                 text("SELECT pg_advisory_xact_lock(hashtext(:tenant_id))"),
                 {"tenant_id": str(tenant_id)},
             )
-            active_jobs = int(
-                await session.scalar(
-                    select(func.count())
-                    .select_from(Job)
-                    .where(Job.tenant_id == tenant_id, Job.status.in_(["queued", "processing"]))
-                )
-                or 0
-            )
-            if active_jobs >= max_queue_size:
-                raise QueueCapacityExceeded("tenant ingestion queue is full")
             if await session.scalar(
                 select(Collection.id).where(
                     Collection.tenant_id == tenant_id, Collection.id == collection_id
@@ -117,6 +110,42 @@ class PostgresIngestionRepository:
                 if document is None or job is None:
                     raise LookupError("idempotency_result_expired")
                 return UploadResult(document.id, job.id, False)
+            duplicate = await session.scalar(
+                select(Document).where(
+                    Document.tenant_id == tenant_id,
+                    Document.collection_id == collection_id,
+                    Document.content_hash == content_hash,
+                )
+            )
+            if duplicate is not None:
+                prior_job = await session.scalar(
+                    select(Job)
+                    .where(
+                        Job.tenant_id == tenant_id,
+                        Job.document_id == duplicate.id,
+                        Job.kind == "ingest",
+                    )
+                    .order_by(Job.created_at.desc())
+                    .limit(1)
+                )
+                if prior_job is None:
+                    raise LookupError("content_dedup_job_missing")
+                await session.execute(
+                    update(IdempotencyRecord)
+                    .where(IdempotencyRecord.tenant_id == tenant_id, IdempotencyRecord.key_hash == idempotency_hash)
+                    .values(result_resource_id=duplicate.id)
+                )
+                return UploadResult(duplicate.id, prior_job.id, False)
+            active_jobs = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(Job)
+                    .where(Job.tenant_id == tenant_id, Job.status.in_(["queued", "processing"]))
+                )
+                or 0
+            )
+            if active_jobs >= max_queue_size:
+                raise QueueCapacityExceeded("tenant ingestion queue is full")
             session.add(
                 Document(
                     id=document_id,
@@ -209,6 +238,7 @@ class PostgresIngestionRepository:
                 "created_at": row.created_at,
                 "updated_at": row.updated_at,
                 "document_id": row.document_id,
+                "kind": row.kind,
             }
 
     async def retry_job(self, tenant_id: UUID, job_id: UUID) -> UUID | None:
@@ -226,18 +256,81 @@ class PostgresIngestionRepository:
             )
             if document is None:
                 return None
-            document.status = "queued"
+            document.status = "deleting" if previous.kind == "delete" else "queued"
             session.add(
                 Job(
                     id=new_job_id,
                     tenant_id=tenant_id,
                     document_id=document.id,
-                    kind="ingest",
+                    kind=previous.kind,
                     status="queued",
                     stage="queued",
                 )
             )
             return new_job_id
+
+    async def queue_delete(self, tenant_id: UUID, document_id: UUID) -> UUID | None:
+        async with self._database.tenant_session(tenant_id) as session:
+            document = await session.scalar(
+                select(Document).where(Document.tenant_id == tenant_id, Document.id == document_id)
+            )
+            if document is None:
+                return None
+            existing = await session.scalar(
+                select(Job)
+                .where(
+                    Job.tenant_id == tenant_id,
+                    Job.document_id == document_id,
+                    Job.kind == "delete",
+                    Job.status.in_(["queued", "processing"]),
+                )
+                .order_by(Job.created_at.desc())
+                .limit(1)
+            )
+            if existing is not None:
+                return existing.id
+            if document.status == "deleted":
+                return None
+            job_id = uuid4()
+            await session.execute(
+                update(Job)
+                .where(
+                    Job.tenant_id == tenant_id,
+                    Job.document_id == document_id,
+                    Job.kind == "ingest",
+                    Job.status.in_(["queued", "processing"]),
+                )
+                .values(status="cancelled", stage="cancelled")
+            )
+            document.status = "deleting"
+            session.add(
+                Job(
+                    id=job_id,
+                    tenant_id=tenant_id,
+                    document_id=document_id,
+                    kind="delete",
+                    status="queued",
+                    stage="queued",
+                )
+            )
+            return job_id
+
+    async def cancel_job(self, tenant_id: UUID, job_id: UUID) -> dict[str, object] | None:
+        async with self._database.tenant_session(tenant_id) as session:
+            job = await session.scalar(
+                select(Job).where(Job.tenant_id == tenant_id, Job.id == job_id)
+            )
+            if job is None or job.status != "queued":
+                return None
+            job.status = "cancelled"
+            job.stage = "cancelled"
+            if job.kind == "ingest" and job.document_id is not None:
+                await session.execute(
+                    update(Document)
+                    .where(Document.tenant_id == tenant_id, Document.id == job.document_id)
+                    .values(status="ready" if job.kind == "delete" else "failed")
+                )
+            return {"id": job.id, "document_id": job.document_id}
 
     async def load_for_processing(
         self, tenant_id: UUID, document_id: UUID
@@ -254,12 +347,20 @@ class PostgresIngestionRepository:
         async with self._database.tenant_session(tenant_id) as session:
             await session.execute(
                 update(Document)
-                .where(Document.tenant_id == tenant_id, Document.id == document_id)
+                .where(
+                    Document.tenant_id == tenant_id,
+                    Document.id == document_id,
+                    Document.status.notin_(["deleting", "deleted"]),
+                )
                 .values(status=status)
             )
             await session.execute(
                 update(Job)
-                .where(Job.tenant_id == tenant_id, Job.id == job_id)
+                .where(
+                    Job.tenant_id == tenant_id,
+                    Job.id == job_id,
+                    Job.status.in_(["queued", "processing"]),
+                )
                 .values(status=status, stage=status, progress=progress)
             )
 
@@ -274,9 +375,11 @@ class PostgresIngestionRepository:
     ) -> None:
         async with self._database.tenant_session(tenant_id) as session:
             document = await session.scalar(
-                select(Document).where(Document.tenant_id == tenant_id, Document.id == document_id)
+                select(Document)
+                .where(Document.tenant_id == tenant_id, Document.id == document_id)
+                .with_for_update()
             )
-            if document is None:
+            if document is None or document.status != "processing":
                 return
             await session.execute(
                 delete(Chunk).where(Chunk.tenant_id == tenant_id, Chunk.document_id == document_id)
@@ -294,8 +397,8 @@ class PostgresIngestionRepository:
                         page=chunk.page,
                         section=chunk.section,
                         quarantined=chunk.quarantined,
-                        embedding_model="configured",
-                        embedding_dimensions=len(embedding),
+                        embedding_model=self._embedding_model if embedding is not None else None,
+                        embedding_dimensions=self._embedding_dimensions if embedding is not None else None,
                     )
                 )
             document.status = "ready"
@@ -323,5 +426,42 @@ class PostgresIngestionRepository:
                     stage="failed",
                     error_code=error_code,
                     retryable=error_code in {"embedding_provider_unavailable", "storage_unavailable"},
+                )
+            )
+
+    async def finish_deletion(self, tenant_id: UUID, document_id: UUID, job_id: UUID) -> None:
+        async with self._database.tenant_session(tenant_id) as session:
+            await session.execute(
+                delete(Chunk).where(Chunk.tenant_id == tenant_id, Chunk.document_id == document_id)
+            )
+            await session.execute(
+                update(Document)
+                .where(Document.tenant_id == tenant_id, Document.id == document_id)
+                .values(
+                    name="deleted.pdf",
+                    content_hash="0" * 64,
+                    storage_key="",
+                    size_bytes=0,
+                    page_count=None,
+                    metadata_json={},
+                    status="deleted",
+                )
+            )
+            await session.execute(
+                update(Job)
+                .where(Job.tenant_id == tenant_id, Job.id == job_id)
+                .values(status="ready", stage="completed", progress=100, retryable=False)
+            )
+
+    async def fail_deletion(self, tenant_id: UUID, job_id: UUID) -> None:
+        async with self._database.tenant_session(tenant_id) as session:
+            await session.execute(
+                update(Job)
+                .where(Job.tenant_id == tenant_id, Job.id == job_id)
+                .values(
+                    status="failed",
+                    stage="failed",
+                    error_code="blob_delete_failed",
+                    retryable=True,
                 )
             )

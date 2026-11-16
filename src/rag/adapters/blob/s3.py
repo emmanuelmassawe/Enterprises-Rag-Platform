@@ -48,7 +48,7 @@ class S3BlobStore:
             source,
             self.bucket,
             key,
-            ExtraArgs={"ContentType": "application/pdf", "ServerSideEncryption": "AES256"},
+            ExtraArgs={"ContentType": "application/pdf"},
             Config=self._transfer,
         )
 

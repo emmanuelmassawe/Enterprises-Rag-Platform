@@ -15,7 +15,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH"
 RUN python -m venv /opt/venv \
     && groupadd --system app \
-    && useradd --system --gid app --home-dir /app --create-home app
+    && useradd --system --gid app --home-dir /app --create-home app \
+    && install -d -o app -g app /var/lib/rag/blobs
 WORKDIR /app
 COPY alembic.ini ./
 COPY --from=builder /wheels /wheels

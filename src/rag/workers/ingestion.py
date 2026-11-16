@@ -49,7 +49,9 @@ async def startup(ctx: dict[str, Any]) -> None:
         raise RuntimeError("EMBEDDING_API_KEY is required by the ingestion worker")
     database = Database(settings.database_url.get_secret_value())
     ctx["database"] = database
-    ctx["repository"] = PostgresIngestionRepository(database)
+    ctx["repository"] = PostgresIngestionRepository(
+        database, settings.embedding_model, settings.embedding_dimensions
+    )
     ctx["blob_store"] = _blob_store()
     ctx["embeddings"] = GeminiEmbeddings(
         settings.embedding_api_key.get_secret_value(),
@@ -78,7 +80,13 @@ async def process_document(
     blob_store = cast(BlobStore, ctx["blob_store"])
     embeddings = cast(GeminiEmbeddings, ctx["embeddings"])
     document = await repository.load_for_processing(tenant_uuid, document_uuid)
-    if document is None:
+    job = await repository.get_job(tenant_uuid, job_uuid)
+    if (
+        document is None
+        or document["status"] not in {"queued", "processing"}
+        or job is None
+        or job["status"] not in {"queued", "processing"}
+    ):
         return
     await repository.set_progress(tenant_uuid, document_uuid, job_uuid, "processing", 5)
     temporary_path: Path | None = None
@@ -137,10 +145,37 @@ async def process_document(
             temporary_path.unlink(missing_ok=True)
 
 
+async def process_delete(ctx: dict[str, Any], tenant_id: str, document_id: str, job_id: str) -> None:
+    """Purge the source object and all indexed chunks, then redact document metadata."""
+    tenant_uuid, document_uuid, job_uuid = UUID(tenant_id), UUID(document_id), UUID(job_id)
+    repository = cast(IngestionRepository, ctx["repository"])
+    blob_store = cast(BlobStore, ctx["blob_store"])
+    document = await repository.load_for_processing(tenant_uuid, document_uuid)
+    job = await repository.get_job(tenant_uuid, job_uuid)
+    if document is None or job is None or job["status"] != "queued":
+        return
+    try:
+        storage_key = str(document.get("storage_key", ""))
+        if storage_key:
+            await blob_store.delete(storage_key)
+        await repository.finish_deletion(tenant_uuid, document_uuid, job_uuid)
+        structlog.get_logger("worker").info(
+            "document_deletion_completed",
+            tenant_id=tenant_id,
+            document_id=document_id,
+            job_id=job_id,
+        )
+    except Exception:
+        attempt = int(ctx.get("job_try", 1))
+        if attempt < 3:
+            raise Retry(defer=min(30, 2**attempt + random.random() * 2)) from None
+        await repository.fail_deletion(tenant_uuid, job_uuid)
+
+
 class WorkerSettings:
     """ARQ registration and bounded worker settings."""
 
-    functions = [process_document]
+    functions = [process_document, process_delete]
     on_startup = startup
     on_shutdown = shutdown
     max_jobs = get_settings().ingestion_max_concurrency

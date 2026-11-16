@@ -6,7 +6,7 @@ setup:
 dev:
 	docker compose up -d db state cache
 	docker compose --profile tools run --rm migrator
-	docker compose up --build api
+	docker compose up --build api worker
 
 test:
 	uv run coverage run -m pytest

@@ -47,7 +47,9 @@ elif settings.blob_backend == "s3":
     )
 api_key_application = ApiKeyService(PostgresApiKeyStore(database)) if database is not None else None
 ingestion_repository = (
-    PostgresIngestionRepository(database) if database is not None else None
+    PostgresIngestionRepository(database, settings.embedding_model, settings.embedding_dimensions)
+    if database is not None
+    else None
 )
 ingestion_application = (
     IngestionService(

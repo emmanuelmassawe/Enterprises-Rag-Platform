@@ -7,6 +7,23 @@ services:
       LOG_LEVEL: INFO
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://rag_runtime@db:5432/enterprise_rag}
       REDIS_URL: ${REDIS_URL:-redis://state:6379/0}
+      BLOB_BACKEND: ${BLOB_BACKEND:-local}
+      BLOB_LOCAL_ROOT: /var/lib/rag/blobs
+      BLOB_BUCKET: ${BLOB_BUCKET:-enterprise-rag-local}
+      BLOB_ENDPOINT_URL: ${BLOB_ENDPOINT_URL:-}
+      BLOB_REGION: ${BLOB_REGION:-us-east-1}
+      BLOB_ACCESS_KEY_ID: ${BLOB_ACCESS_KEY_ID:-}
+      BLOB_SECRET_ACCESS_KEY: ${BLOB_SECRET_ACCESS_KEY:-}
+      BLOB_MAX_UPLOAD_BYTES: ${BLOB_MAX_UPLOAD_BYTES:-104857600}
+      BLOB_MAX_PAGES: ${BLOB_MAX_PAGES:-250}
+      INGESTION_MAX_QUEUE_SIZE: ${INGESTION_MAX_QUEUE_SIZE:-500}
+      INGESTION_MAX_CONCURRENCY: ${INGESTION_MAX_CONCURRENCY:-2}
+      INGESTION_CHUNK_CHARS: ${INGESTION_CHUNK_CHARS:-2400}
+      INGESTION_CHUNK_OVERLAP_CHARS: ${INGESTION_CHUNK_OVERLAP_CHARS:-300}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-gemini-embedding-2}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-768}
+      EMBEDDING_TIMEOUT_SECONDS: ${EMBEDDING_TIMEOUT_SECONDS:-20}
       METRICS_SCRAPE_TOKEN: ${METRICS_SCRAPE_TOKEN:-}
       RATE_LIMIT_REQUESTS: ${RATE_LIMIT_REQUESTS:-60}
       RATE_LIMIT_WINDOW_SECONDS: ${RATE_LIMIT_WINDOW_SECONDS:-60}
@@ -17,6 +34,8 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=16m,noexec,nosuid
+    volumes:
+      - document_blobs:/var/lib/rag/blobs
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -36,6 +55,50 @@ services:
       timeout: 3s
       retries: 3
       start_period: 10s
+
+  worker:
+    build:
+      context: .
+    command: ["arq", "rag.workers.ingestion.WorkerSettings"]
+    environment:
+      APP_ENV: development
+      LOG_LEVEL: INFO
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://rag_runtime@db:5432/enterprise_rag}
+      REDIS_URL: ${REDIS_URL:-redis://state:6379/0}
+      BLOB_BACKEND: ${BLOB_BACKEND:-local}
+      BLOB_LOCAL_ROOT: /var/lib/rag/blobs
+      BLOB_BUCKET: ${BLOB_BUCKET:-enterprise-rag-local}
+      BLOB_ENDPOINT_URL: ${BLOB_ENDPOINT_URL:-}
+      BLOB_REGION: ${BLOB_REGION:-us-east-1}
+      BLOB_ACCESS_KEY_ID: ${BLOB_ACCESS_KEY_ID:-}
+      BLOB_SECRET_ACCESS_KEY: ${BLOB_SECRET_ACCESS_KEY:-}
+      BLOB_MAX_UPLOAD_BYTES: ${BLOB_MAX_UPLOAD_BYTES:-104857600}
+      BLOB_MAX_PAGES: ${BLOB_MAX_PAGES:-250}
+      INGESTION_MAX_QUEUE_SIZE: ${INGESTION_MAX_QUEUE_SIZE:-500}
+      INGESTION_MAX_CONCURRENCY: ${INGESTION_MAX_CONCURRENCY:-2}
+      INGESTION_CHUNK_CHARS: ${INGESTION_CHUNK_CHARS:-2400}
+      INGESTION_CHUNK_OVERLAP_CHARS: ${INGESTION_CHUNK_OVERLAP_CHARS:-300}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-gemini-embedding-2}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-768}
+      EMBEDDING_TIMEOUT_SECONDS: ${EMBEDDING_TIMEOUT_SECONDS:-20}
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid
+    volumes:
+      - document_blobs:/var/lib/rag/blobs
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      state:
+        condition: service_healthy
+    networks:
+      - backend
 
   migrator:
     build:
@@ -95,6 +158,7 @@ services:
 
 volumes:
   postgres_data:
+  document_blobs:
 
 networks:
   default:
