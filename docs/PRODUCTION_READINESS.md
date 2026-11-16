@@ -21,10 +21,11 @@ This file records completed checks and unresolved release gates. Passing a local
 | Area | Evidence | Result |
 |---|---|---|
 | Static quality | `ruff check .`; `ruff format --check .`; `mypy src`; `lint-imports` | Passed. The domain and API layer contracts remain intact. |
-| Unit behavior and coverage | `coverage run -m pytest -q`; `coverage report --fail-under=80` | 66 passed; 81% branch-aware coverage; one Starlette/httpx deprecation warning. |
-| Empty and populated migration | `docker compose --profile tools run --rm migrator` applied both migrations; rerun after upgrade | Passed; second run had no pending migration. |
+| Unit behavior and coverage | `coverage run -m pytest -q`; `coverage report --fail-under=80` | 67 passed; 81% branch-aware coverage; one Starlette/httpx deprecation warning. |
+| Empty and populated migration | `docker compose --profile tools run --rm migrator` applied the schema; repeat upgrade and `alembic check` against the populated local database | Passed; repeat upgrade was a no-op and Alembic reported no new upgrade operations. |
 | Quarantine database policy | Local Postgres query checked `relrowsecurity`, `relforcerowsecurity`, and `rag_runtime` DML grant on `quarantine_decisions` | All three true. Migration also creates the tenant-scoped audit table and forced RLS policy. |
-| API/worker images | `docker compose build api worker` | Passed with the hardened non-root, read-only container images. |
+| API/worker/migrator images | `docker compose build api worker migrator` | Passed with the hardened non-root, read-only container images. |
+| Dependency audit | `pip-audit --skip-editable` using the current PyPI vulnerability database | No known vulnerabilities found; the editable project package was skipped by design. |
 | Provider integration | No live Gemini or production S3 credentials were used | Not exercised. Unit tests use deterministic provider/storage fakes. |
 
 The local review endpoints require admin API-key scope, expose plain text only, and record an idempotent decision with actor, reason, and tenant identity. The heuristic scanner is only triage; it is not a safety guarantee. Production data must not be sent to Gemini until the proposed model, dimension, region, retention and spend limits are confirmed.

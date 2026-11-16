@@ -40,20 +40,20 @@ Status: mixed. Milestones 2 and 3 have implementation and unit-test evidence; la
 
 | NFR | Architectural decisions/components | Verification and planned evidence | Monitoring/SLO |
 |---|---|---|---|
-| NFR-PERF-001/002 | ADR-001, 003, 008; route/pipeline histograms | pinned model staging load test, `EXPLAIN ANALYZE` | p95 TTFT/full answer/non-LLM latency |
-| NFR-SCALE-001/002 | ADR-001, 004, 006; horizontally scaled API/workers | concurrent capacity/soak test, 100-page synthetic PDF | saturation, queue age, memory, throughput |
-| NFR-AVAIL-001 | ADR-002, 004, 010 | monthly synthetic SLI and deployment checks | 99.5% proposed API availability |
-| NFR-REL-001 | ADR-004, 006, 008 | dependency fault injection and duplicate delivery | 5xx, retries, breaker state |
+| NFR-PERF-001/002 | ADR-001, 003, 008, 013; bounded uploads, parser, provider timeout and embedding batches | pinned model staging load test, `EXPLAIN ANALYZE` | p95 TTFT/full answer/non-LLM latency |
+| NFR-SCALE-001/002 | ADR-001, 004, 006, 013; horizontally scaled API/workers with upload/page/chunk/queue/concurrency bounds | concurrent capacity/soak test, 100-page synthetic PDF | saturation, queue age, memory, throughput |
+| NFR-AVAIL-001 | ADR-002, 004, 010, 013; bounded queue failure maps to retryable 503 and readiness includes queue | monthly synthetic SLI and deployment checks | 99.5% proposed API availability |
+| NFR-REL-001 | ADR-004, 006, 008, 013; stable job IDs and idempotent duplicate-safe ingestion/deletion | dependency fault injection and duplicate delivery | 5xx, retries, breaker state |
 | NFR-DR-001 | ADR-001, 004, 005, 010 | scheduled restore drill with measured RTO/RPO | backup status, restore drill evidence |
-| NFR-SEC-001/002/003 | ADR-007, 009, 011, 012 | CI RLS smoke, later red-team, gitleaks, TLS and secret tests | RLS visibility and denied insert verified; zero leakage target and security event counts remain monitored release goals |
-| NFR-PRIV-001 | ADR-005, 011 | export payload and retention/deletion review | purge lag, trace export data audit |
-| NFR-AI-001/002 | ADR-003, 008, 009 | golden set and adversarial/browser tests | retrieval/groundedness/citation/refusal trends |
+| NFR-SEC-001/002/003 | ADR-007, 009, 011, 012, 013; tenant RLS, admin-only quarantine review and audit | CI RLS smoke, later red-team, gitleaks, TLS and secret tests | RLS visibility and denied insert verified; zero leakage target and security event counts remain monitored release goals |
+| NFR-PRIV-001 | ADR-005, 011, 013; private source storage, metadata redaction on deletion, bounded log fields | export payload and retention/deletion review | purge lag, trace export data audit |
+| NFR-AI-001/002 | ADR-003, 008, 009, 013; heuristic quarantine triage before retrieval | golden set and adversarial/browser tests | retrieval/groundedness/citation/refusal trends |
 | NFR-A11Y-001, UX-001 | ADR-009 | axe, Lighthouse, keyboard/SR and i18n E2E | accessibility score and issue count |
-| NFR-MAINT-001, TEST-001 | hexagonal layering, CI contract, 80% unit coverage gate | coverage, mypy, Ruff, import-linter, traceability CI | Local M2 static checks and 86% coverage passed; full adapter contract inventory remains planned |
+| NFR-MAINT-001, TEST-001 | hexagonal layering, ingestion ports/adapters, CI contract, 80% unit coverage gate; ADR-013 | coverage, mypy, Ruff, import-linter, traceability CI | M3: 81% coverage, strict mypy, Ruff and import-linter pass; live provider contract tests remain planned |
 | NFR-OBS-001 | ADR-011 | telemetry/redaction tests and alert exercise | trace completeness, missing telemetry alerts |
 | NFR-PORT-001 | ADR-001, 005, 006, 008, 011, 012 | local Compose has separate Redis state/cache policies; shared adapter contract suites/local composition | adapter conformance report |
 | NFR-COMP-001 | ADR-009 | Playwright current/previous browser matrix | browser E2E pass rate |
 | NFR-COST-001 | ADR-008, 006 | provider reconciliation, spend-cap/kill-switch exercise | cost/query, spend/tenant, budget alert |
-| NFR-OPS-001 | ADR-004, 010, 012 | async lifecycle cleanup, readiness and migration/runtime role separation; later SIGTERM/deploy checks | local migration and role smoke, unit tests; staging deploy/rollback not yet run | request metrics and readiness live; deployment health/rollback metrics planned |
-| NFR-DATA-001 | ADR-001, 004, 005, 006, 011 | partial-write/crash tests and deletion/restore drills | deletion completion, recovery objectives |
+| NFR-OPS-001 | ADR-004, 010, 012, 013 | async lifecycle cleanup, bounded work, readiness and migration/runtime role separation; later SIGTERM/deploy checks | local migration and role smoke, unit tests; staging deploy/rollback not yet run | request metrics and readiness live; deployment health/rollback metrics planned |
+| NFR-DATA-001 | ADR-001, 004, 005, 006, 011, 013 | partial-write/crash tests and deletion/restore drills | deletion completion, recovery objectives |
 
