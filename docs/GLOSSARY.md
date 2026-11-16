@@ -12,6 +12,9 @@
 | Groundedness | Degree to which generated claims are supported by retrieved evidence. |
 | Refusal | Safe response that evidence or policy does not support an answer. |
 | Quarantine | State preventing a suspicious chunk from normal retrieval until authorized review. |
+| Quarantine decision | Idempotent, tenant-scoped audit record of an administrator approving or rejecting a quarantined chunk. |
+| BlobStore | Port for private document object storage, implemented locally by a shared volume and in production by S3-compatible storage. |
+| Ingestion job | Bounded asynchronous task that extracts, scans, chunks, embeds, and indexes a document. |
 | RLS | PostgreSQL Row-Level Security policies applied using transaction-bound tenant identity. |
 | BFF | Backend-for-frontend: same-origin web server that holds API credentials and proxies UI requests. |
 | SSE | Server-Sent Events, one-way HTTP event stream used for incremental answer delivery. |

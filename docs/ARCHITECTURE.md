@@ -134,6 +134,33 @@ flowchart TB
 
 Terraform is the infrastructure source of truth. Provider/API capability, service plans, region and secrets are reviewed before any `.tf` implementation. Paid Render Postgres supports backups/PITR according to current docs, with recovery window tied to workspace plan; RPO/RTO remain targets until tested. Paid Key Value persistence and policy are selected separately. No production apply outside owner-approved CI/CD. The web/BFF and API use private service connections where supported; no public DB/Redis ingress.
 
+## Milestone 3 ingestion path
+
+```mermaid
+sequenceDiagram
+  actor Client
+  participant API as FastAPI upload/admin API
+  participant DB as Postgres with tenant RLS
+  participant Blob as Private BlobStore
+  participant Queue as ARQ on rag-state Redis
+  participant Worker as Ingestion worker
+  participant Embed as Gemini embedding adapter
+  Client->>API: PDF + idempotency key
+  API->>Blob: Store bounded private object
+  API->>DB: Create document and job
+  API->>Queue: Enqueue stable job ID
+  Worker->>Blob: Download to bounded temporary file
+  Worker->>Worker: Parse pages, chunk, scan suspicious text
+  Worker->>Embed: Embed eligible chunks in bounded batches
+  Worker->>DB: Save vectors, provenance, quarantine status
+  Client->>API: Poll job/document state
+  actor Admin
+  Admin->>API: Review pending quarantined chunk
+  API->>DB: Record idempotent decision and actor
+```
+
+The worker stores only opaque tenant/document/job IDs in logs. PDF extraction runs off the event loop. Queue delivery is at least once; stable job IDs and row-locked finalization keep duplicate jobs safe. Temporary input storage is bounded; the review API returns plain text that the UI must render without HTML interpretation.
+
 ## Decisions and trade-offs
 
 See [ADR index](ADR/README.md). Main deliberate trade-offs: REST/SSE is simpler for this bounded UI and client model but streaming cannot resume; Postgres/pgvector reduces data-system count but requires careful tenant-filtered ANN validation; two Redis instances increase cost but separate queue integrity from cache eviction; managed LangSmith/Grafana reduce operations while requiring redaction, retention review and adapter portability; Gemini selection follows owner preference, but exact models, dimensions, region and provider terms remain to confirm.

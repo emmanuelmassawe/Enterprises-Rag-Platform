@@ -133,7 +133,9 @@ class IngestionRepository(Protocol):
         self, tenant_id: UUID, document_id: UUID | None, cursor: UUID | None, limit: int
     ) -> tuple[list[dict[str, object]], UUID | None]: ...
 
-    async def get_quarantined(self, tenant_id: UUID, chunk_id: UUID) -> dict[str, object] | None: ...
+    async def get_quarantined(
+        self, tenant_id: UUID, chunk_id: UUID
+    ) -> dict[str, object] | None: ...
 
     async def decide_quarantined(
         self,

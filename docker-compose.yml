@@ -33,7 +33,7 @@ services:
       - "127.0.0.1:8000:8000"
     read_only: true
     tmpfs:
-      - /tmp:size=16m,noexec,nosuid
+      - /tmp:size=256m,noexec,nosuid
     volumes:
       - document_blobs:/var/lib/rag/blobs
     security_opt:
@@ -84,7 +84,7 @@ services:
       EMBEDDING_TIMEOUT_SECONDS: ${EMBEDDING_TIMEOUT_SECONDS:-20}
     read_only: true
     tmpfs:
-      - /tmp:size=64m,noexec,nosuid
+      - /tmp:size=256m,noexec,nosuid
     volumes:
       - document_blobs:/var/lib/rag/blobs
     security_opt:

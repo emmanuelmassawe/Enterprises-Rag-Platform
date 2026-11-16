@@ -1,16 +1,16 @@
 # Requirements traceability
 
-Status: mixed. Milestone 2 authentication, rate limiting, persistence foundations and operational checks have implementation and test evidence; later milestone rows remain planned. CI must keep all FR references and tests synchronized. Monitoring columns distinguish live signals from planned signals.
+Status: mixed. Milestones 2 and 3 have implementation and unit-test evidence; later milestone rows remain planned. CI must keep all FR references and tests synchronized. Monitoring columns distinguish live signals from planned signals.
 
 ## Functional requirements
 
 | Requirement | Component | Endpoint(s) | Test ID(s) | Monitoring / SLO |
 |---|---|---|---|---|
-| FR-ING-001 | Upload API, BlobStore, parser | POST `/v1/documents` | `test_req_fr_ing_001_upload_validation` | upload rejects, bytes, unsupported MIME counter |
-| FR-ING-002 | Worker, job service, queue | POST `/v1/documents`; GET `/v1/jobs/{id}`; POST `/v1/jobs/{id}/retry`; DELETE job | `test_req_fr_ing_002_job_state` | queue depth, oldest age, duration, failures, DLQ |
-| FR-ING-003 | Content scanner, quarantine service | document job; `/v1/admin/quarantine*` | `test_req_fr_ing_003_quarantine` | quarantined chunks, detector rate, review age |
-| FR-ING-004 | Parser/provenance, citation DTO | POST documents; GET documents; POST query | `test_req_fr_ing_004_provenance` | missing page metadata, citation resolution failure |
-| FR-ING-005 | Deletion orchestrator, BlobStore, Redis, telemetry lifecycle | DELETE document/collection | `test_req_fr_ing_005_delete_cascade` | deletion backlog/partial failures |
+| FR-ING-001 | Upload API, BlobStore, bounded PDF parser | POST `/v1/documents` | `test_req_fr_ing_001_upload_is_stored_and_enqueued_once`; API PDF and magic-byte tests | Upload rejects and worker completion logs live; counters planned |
+| FR-ING-002 | ARQ worker, job repository, Redis queue | POST `/v1/documents`; GET `/v1/jobs/{id}`; POST `/v1/jobs/{id}/retry`; DELETE job | Full-queue, queue rollback, retry, cancel, and worker idempotency tests | Queue depth, oldest age, duration, and DLQ metrics planned |
+| FR-ING-003 | Heuristic scanner, quarantined chunk state, admin review/audit API | document job; GET `/v1/admin/quarantine*`; POST `/v1/admin/quarantine/{id}/decision` | `test_req_fr_ing_003_normalizes_hidden_unicode_and_quarantines_instructions`; quarantine API/repository tests | Quarantine count, review age, detector metrics planned |
+| FR-ING-004 | pypdf page extraction, deterministic page-aware chunker | POST/GET `/v1/documents`; future POST `/v1/query` | `test_req_fr_ing_004_chunking_is_bounded_and_preserves_page_provenance`; PDF page-limit tests | Missing page metadata and citation resolution metrics planned |
+| FR-ING-005 | Deletion job, BlobStore, repository cleanup | DELETE `/v1/documents/{id}` | Worker deletion idempotency and failure-retry tests | Deletion backlog/partial-failure metrics planned |
 | FR-QRY-001 | Query service, ACL retrieval, RLS, hybrid search | POST `/v1/query` | `test_req_fr_qry_001_scope` | retrieval latency, empty-result rate |
 | FR-QRY-002 | Evidence threshold, refusal policy | POST `/v1/query` | `test_req_fr_qry_002_refusal` | refusal rate, refusal accuracy eval |
 | FR-QRY-003 | SSE transport, provider cancellation | POST `/v1/query` | `test_req_fr_qry_003_sse_terminal_cancel` | TTFT, stream duration, cancellations |
@@ -24,7 +24,7 @@ Status: mixed. Milestone 2 authentication, rate limiting, persistence foundation
 | FR-AUTH-003 | Transaction-local DB tenant context, forced Postgres RLS, separate migration/runtime roles | tenant-scoped repositories | `test_req_fr_auth_003_database_sets_transaction_local_identity`; CI migration/RLS smoke with two synthetic tenants | CI verifies tenant visibility and cross-tenant insert denial; security event aggregation remains planned |
 | FR-AUTH-004 | Redis fixed-window `RateLimiter`, bounded local fallback | `/v1/admin/api-keys*`; future protected query/upload/write endpoints | `test_req_fr_auth_004_memory_limiter_*`; `test_req_fr_auth_004_shared_limiter_uses_atomic_tenant_key_counter`; `test_req_fr_auth_004_limiter_uses_fallback_when_no_redis_is_configured` | Live `rag_rate_limit_fallback_total`; 429 status counts; quotas/cost anomaly remain planned |
 | FR-KB-001 | Collection/document use cases and repositories | `/v1/collections*`; `/v1/documents` | `test_req_fr_kb_001_crud_scope` | CRUD errors, delete cascade age |
-| FR-ADM-001 | Quarantine review/audit service | `/v1/admin/quarantine*` | `test_req_fr_adm_001_review_audit` | review queue depth/age, decisions |
+| FR-ADM-001 | Admin-scoped quarantine review API and `quarantine_decisions` audit table | GET `/v1/admin/quarantine*`; POST `/v1/admin/quarantine/{id}/decision` | Quarantine API auth, decision idempotency and audit repository tests | Review queue depth/age/decision counters planned |
 | FR-ADM-002 | Usage aggregation, API key service, status | `/v1/admin/usage`; `/v1/admin/api-keys*`; `/v1/admin/status` | `test_req_fr_adm_002_admin_scope` | usage/cost, admin endpoint errors |
 | FR-FBK-001 | Feedback service, query correlation, LangSmith adapter | POST `/v1/feedback` | `test_req_fr_fbk_001_feedback` | feedback rate, export failure counter |
 | FR-EVL-001 | Eval harness, version registry | offline `make eval`; no runtime endpoint | `test_req_fr_evl_001_golden_eval` | recall@k, groundedness, citation/refusal metrics |

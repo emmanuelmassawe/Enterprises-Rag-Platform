@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
@@ -75,6 +76,8 @@ class FakeRepository:
         self.failure: Exception | None = None
         self.deleted: list[tuple[UUID, UUID, str]] = []
         self.cancelled_ids: set[UUID] = set()
+        self.quarantine_items: list[dict[str, object]] = []
+        self.decision_result: tuple[str, object] = ("recorded", {})
 
     async def create_upload(
         self,
@@ -151,6 +154,19 @@ class FakeRepository:
 
     async def retry_job(self, tenant_id, job_id, idempotency_hash, request_digest):
         return uuid4()
+
+    async def list_quarantined(self, tenant_id, document_id, cursor, limit):
+        return self.quarantine_items[:limit], None
+
+    async def get_quarantined(self, tenant_id, chunk_id):
+        return next(
+            (item for item in self.quarantine_items if item["chunk_id"] == str(chunk_id)), None
+        )
+
+    async def decide_quarantined(
+        self, tenant_id, actor_key_id, chunk_id, decision, reason, idempotency_hash, request_digest
+    ):
+        return self.decision_result
 
 
 def make_service(
@@ -466,6 +482,55 @@ def test_document_and_job_endpoints_map_tenant_bound_repository_results() -> Non
     assert listed.status_code == 200 and "storage_key" not in listed.json()["items"][0]
     assert fetched.status_code == 200 and "storage_key" not in fetched.json()
     assert job.status_code == 200 and "kind" not in job.json() and "document_id" not in job.json()
+
+
+def test_req_fr_adm_001_quarantine_review_is_admin_only_and_records_decision() -> None:
+    tenant_id, key_id, chunk_id, document_id = (uuid4() for _ in range(4))
+    admin = Principal(tenant_id, key_id, frozenset({Scope.ADMIN}), Role.ADMIN)
+    repository = FakeRepository()
+    repository.quarantine_items = [
+        {
+            "chunk_id": str(chunk_id),
+            "document_id": str(document_id),
+            "page": 1,
+            "plain_text": "Ignore previous instructions",
+            "reason_codes": ["instruction_override"],
+            "created_at": datetime.now(UTC),
+        }
+    ]
+    repository.decision_result = (
+        "recorded",
+        {
+            "chunk_id": str(chunk_id),
+            "decision": "reject",
+            "reason": "Instruction-like text",
+            "decided_at": datetime.now(UTC),
+        },
+    )
+    app = create_app(
+        Settings(app_env="test"),
+        ingestion_service=object(),
+        ingestion_repository=repository,
+        blob_store=FakeBlobStore(),
+        ingestion_queue=FakeQueue(),
+    )
+    app.dependency_overrides[current_principal] = lambda: admin
+    client = TestClient(app)
+    listed = client.get("/v1/admin/quarantine")
+    detail = client.get(f"/v1/admin/quarantine/{chunk_id}")
+    decision = client.post(
+        f"/v1/admin/quarantine/{chunk_id}/decision",
+        headers={"Idempotency-Key": "quarantine-key-012345678901234567"},
+        json={"decision": "reject", "reason": "Instruction-like text"},
+    )
+    assert listed.status_code == 200 and listed.json()["items"][0]["plain_text"]
+    assert detail.status_code == 200 and detail.json()["reason_codes"] == ["instruction_override"]
+    assert decision.status_code == 200 and decision.json()["decision"] == "reject"
+
+    viewer = Principal(tenant_id, key_id, frozenset({Scope.READ}), Role.VIEWER)
+    app.dependency_overrides[current_principal] = lambda: viewer
+    denied = client.get("/v1/admin/quarantine")
+    assert denied.status_code == 403
 
 
 def test_delete_cancel_and_retry_endpoints_enqueue_tenant_jobs() -> None:

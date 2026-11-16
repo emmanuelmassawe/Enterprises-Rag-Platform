@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -103,6 +104,56 @@ async def test_req_fr_ing_001_repository_creates_document_and_job() -> None:
     assert (result.document_id, result.job_id, result.created) == (document, job, True)
     assert len(session.added) == 2
     assert len(session.statements) == 6
+
+
+@pytest.mark.asyncio
+async def test_quarantine_decision_updates_chunk_and_creates_tenant_audit() -> None:
+    tenant, actor, chunk_id = uuid4(), uuid4(), uuid4()
+    chunk = SimpleNamespace(quarantined=True, quarantine_status="pending")
+    session = FakeSession(scalars=[None, chunk])
+
+    status, result = await _repo(session).decide_quarantined(
+        tenant,
+        actor,
+        chunk_id,
+        "approve",
+        "Reviewed and accepted",
+        "a" * 64,
+        "b" * 64,
+    )
+
+    assert status == "recorded"
+    assert chunk.quarantined is False and chunk.quarantine_status == "approved"
+    assert len(session.added) == 1
+    audit = session.added[0]
+    assert audit.tenant_id == tenant
+    assert audit.actor_key_id == actor
+    assert audit.chunk_id == chunk_id and audit.decision == "approve"
+
+
+@pytest.mark.asyncio
+async def test_quarantine_decision_replays_idempotently_and_rejects_key_reuse() -> None:
+    tenant, actor, chunk_id = uuid4(), uuid4(), uuid4()
+    now = datetime.now(UTC)
+    existing = SimpleNamespace(
+        request_digest="b" * 64,
+        chunk_id=chunk_id,
+        decision="reject",
+        reason="Unsafe",
+        created_at=now,
+    )
+    session = FakeSession(scalars=[existing])
+    status, response = await _repo(session).decide_quarantined(
+        tenant, actor, chunk_id, "reject", "Unsafe", "a" * 64, "b" * 64
+    )
+    assert status == "reject" and response["decided_at"] == now
+    assert session.added == []
+
+    session = FakeSession(scalars=[existing])
+    with pytest.raises(IdempotencyConflict):
+        await _repo(session).decide_quarantined(
+            tenant, actor, chunk_id, "approve", "Different", "a" * 64, "c" * 64
+        )
 
 
 @pytest.mark.asyncio

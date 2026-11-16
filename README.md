@@ -1,6 +1,6 @@
 # Enterprise RAG Platform
 
-Foundation for a multi-tenant document question-answering service. The current implementation provides the API process, PostgreSQL schema with tenant RLS, hashed API-key authentication, Redis-backed rate limiting, protected metrics, health routes, and local container workflow. Knowledge ingestion and the web UI arrive in later milestones.
+Foundation for a multi-tenant document question-answering service. The current implementation provides the FastAPI process, PostgreSQL schema with tenant RLS, hashed API-key authentication, Redis-backed rate limiting and ingestion jobs, protected metrics, health routes, private PDF ingestion, page-aware chunking, Gemini embeddings, quarantine review, and a local API/worker container workflow. Retrieval, answer generation, and the web UI arrive in later milestones.
 
 ## Contents
 
@@ -20,9 +20,15 @@ The approved Phase 0 design proposes p95 non-LLM API latency ≤300 ms, p95 answ
 
 ```mermaid
 flowchart LR
-  Client[Local/API client] --> API[FastAPI]
+  Client[API client] --> API[FastAPI]
+  API --> DB[(Postgres + tenant RLS)]
+  API --> Blob[Private blob volume or S3]
+  API --> Queue[ARQ queue on Redis]
+  Queue --> Worker[Ingestion worker]
+  Worker --> DB
+  Worker --> Blob
+  Worker --> Gemini[Gemini embeddings]
   API --> Health[/healthz + /readyz/]
-  API --> Logs[Structured JSON logs]
   API --> Metrics[Protected /metrics]
 ```
 
@@ -36,7 +42,7 @@ Prerequisites: Python 3.12 and [uv](https://docs.astral.sh/uv/); Docker Engine w
 uv sync --all-groups
 docker compose up -d db state cache
 make migrate
-docker compose up --build api
+docker compose up --build api worker
 ```
 
 To provision a first local tenant and its one-time admin credential, run `make bootstrap TENANT_NAME="Example tenant"` after migrations. Store the emitted API key securely; it is shown once and cannot be retrieved later. The local migrator profile uses the privileged database role and must only be run by a trusted operator.
@@ -58,9 +64,18 @@ In another terminal, `make smoke` checks liveness and readiness. Or run `docker 
 | `RATE_LIMIT_WINDOW_SECONDS` | `60` | Shared rate-limit window length. |
 | `RATE_LIMIT_MEMORY_FALLBACK_REQUESTS` | `10` | Stricter per-process limit used if Redis is unavailable. |
 | `RATE_LIMIT_MEMORY_FALLBACK_WINDOW_SECONDS` | `60` | Local fallback window length. |
+| `BLOB_BACKEND` | `local` | `local` shared volume for Compose or `s3` for private S3-compatible object storage. |
+| `BLOB_LOCAL_ROOT` | `/var/lib/rag/blobs` | Local private volume root shared by API and worker. |
+| `BLOB_BUCKET`, `BLOB_ENDPOINT_URL`, `BLOB_REGION` | local bucket, empty endpoint, `us-east-1` | Private S3-compatible target; production endpoint must use HTTPS. |
+| `BLOB_ACCESS_KEY_ID`, `BLOB_SECRET_ACCESS_KEY` | unset | Optional S3 credentials; prefer workload identity where available. |
+| `BLOB_MAX_UPLOAD_BYTES`, `BLOB_MAX_PAGES` | `104857600`, `250` | Upload and PDF extraction bounds. |
+| `INGESTION_MAX_QUEUE_SIZE`, `INGESTION_MAX_CONCURRENCY` | `500`, `2` | Per-tenant queue admission bound and worker concurrency. |
+| `INGESTION_CHUNK_CHARS`, `INGESTION_CHUNK_OVERLAP_CHARS` | `2400`, `300` | Deterministic page-aware chunk sizes. |
+| `EMBEDDING_API_KEY` | unset | Gemini API secret; required by the worker outside test/local startup. |
+| `EMBEDDING_MODEL`, `EMBEDDING_DIMENSIONS`, `EMBEDDING_TIMEOUT_SECONDS` | `gemini-embedding-2`, `768`, `20` | Proposed embedding defaults; confirm with owner before production. |
 Copy `.env.example` to `.env` for local changes. Never commit `.env`.
 
-Compose also runs the separate `cache` Redis service with a 128 MiB cap and `allkeys-lru`, matching the approved state/cache split. The cache adapter is introduced with the query-cache milestone.
+Compose also runs the separate `cache` Redis service with a 128 MiB cap and `allkeys-lru`, matching the approved state/cache split. The ingestion worker uses only `state`. Local uploads and worker downloads use temporary space capped at 256 MiB; production ingress should also enforce the upload request-body limit.
 
 ## Tooling
 
@@ -68,7 +83,7 @@ Compose also runs the separate `cache` Redis service with a 128 MiB cap and `all
 
 ## Security and operations
 
-The metrics endpoint is token-protected and should also be network-restricted by deployment configuration. Request IDs are bounded to a safe character set or regenerated. Logs omit request bodies, query strings, credentials and user identifiers. Liveness checks only the process. Readiness checks Postgres and the shared rate-limit store; a local in-process fallback is reported as not ready because it cannot enforce a cross-replica limit.
+The metrics endpoint is token-protected and should also be network-restricted by deployment configuration. Request IDs are bounded to a safe character set or regenerated. Logs omit request bodies, query strings, credentials and user identifiers. Liveness checks only the process. Readiness checks Postgres, the shared rate-limit store, and ingestion queue. Quarantine content is returned as plain text to authorized admins; clients must never interpret it as HTML. The scanner is heuristic and does not replace guarded-RAG safety rules in the approved architecture.
 
 The container runs as non-root, drops Linux capabilities in Compose, uses a read-only root filesystem, and has a liveness health check. The Python base image and local database/Redis images are pinned by immutable digests. See [architecture](docs/ARCHITECTURE.md) and the [decision records](docs/ADR/README.md).
 

@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 
 import structlog
 from fastapi import APIRouter, Depends, File, Form, Header, Query, Request, UploadFile
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import SQLAlchemyError
 
 from rag.api.dependencies import require_scope
@@ -30,6 +31,13 @@ router = APIRouter(prefix="/v1", tags=["Documents", "Jobs"])
 IDEMPOTENCY_KEY = re.compile(r"^[A-Za-z0-9._:-]{32,128}$")
 METADATA_KEYS = {"source", "department", "category", "tags"}
 UPLOAD_CHUNK_SIZE = 1024 * 1024
+
+
+class QuarantineDecisionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    decision: str = Field(pattern="^(approve|reject)$")
+    reason: str = Field(min_length=1, max_length=1000)
 
 
 def _service(request: Request) -> IngestionApplication:
@@ -454,3 +462,82 @@ async def retry_job(
     job.pop("document_id", None)
     job.pop("kind", None)
     return job
+
+
+@router.get("/admin/quarantine", operation_id="listQuarantine")
+async def list_quarantine(
+    request: Request,
+    principal: Annotated[Principal, Depends(require_scope(Scope.ADMIN))],
+    document_id: UUID | None = None,
+    cursor: UUID | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+) -> dict[str, object]:
+    items, next_cursor = await _repository(request).list_quarantined(
+        principal.tenant_id, document_id, cursor, limit
+    )
+    return {
+        "items": items,
+        "page": {
+            "next_cursor": str(next_cursor) if next_cursor else None,
+            "has_more": next_cursor is not None,
+        },
+    }
+
+
+@router.get("/admin/quarantine/{chunk_id}", operation_id="getQuarantineItem")
+async def get_quarantine_item(
+    request: Request,
+    chunk_id: UUID,
+    principal: Annotated[Principal, Depends(require_scope(Scope.ADMIN))],
+) -> dict[str, object]:
+    item = await _repository(request).get_quarantined(principal.tenant_id, chunk_id)
+    if item is None:
+        raise ProblemException(404, "not_found", "Not found", "Quarantine item was not found.")
+    return item
+
+
+@router.post("/admin/quarantine/{chunk_id}/decision", operation_id="decideQuarantine")
+async def decide_quarantine(
+    request: Request,
+    chunk_id: UUID,
+    body: QuarantineDecisionInput,
+    principal: Annotated[Principal, Depends(require_scope(Scope.ADMIN))],
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
+) -> dict[str, object]:
+    if not IDEMPOTENCY_KEY.fullmatch(idempotency_key):
+        raise ProblemException(
+            422,
+            "validation_failed",
+            "Validation failed",
+            "Idempotency-Key must be 32-128 safe characters.",
+        )
+    idempotency_hash = hashlib.sha256(idempotency_key.encode()).hexdigest()
+    request_digest = hashlib.sha256(
+        f"quarantine:{chunk_id}:{body.decision}:{body.reason}".encode()
+    ).hexdigest()
+    try:
+        status, result = await _repository(request).decide_quarantined(
+            principal.tenant_id,
+            principal.key_id,
+            chunk_id,
+            body.decision,
+            body.reason,
+            idempotency_hash,
+            request_digest,
+        )
+    except IdempotencyConflict as exc:
+        raise ProblemException(
+            409,
+            "idempotency_conflict",
+            "Conflict",
+            "The idempotency key was already used for a different decision.",
+        ) from exc
+    if status == "not_found":
+        raise ProblemException(404, "not_found", "Not found", "Quarantine item was not found.")
+    decision_record = cast(dict[str, object], result)
+    return {
+        "chunk_id": str(chunk_id),
+        "decision": decision_record["decision"],
+        "decided_at": decision_record["decided_at"],
+        "request_id": request.state.request_id,
+    }

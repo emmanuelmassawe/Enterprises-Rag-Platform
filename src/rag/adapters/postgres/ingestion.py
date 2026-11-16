@@ -15,6 +15,7 @@ from rag.adapters.postgres.models import (
     IdempotencyRecord,
     Job,
     QueryLog,
+    QuarantineDecision,
 )
 from rag.db.session import Database
 from rag.domain.auth import IdempotencyConflict
@@ -437,7 +438,9 @@ class PostgresIngestionRepository:
                         page=chunk.page,
                         section=chunk.section,
                         quarantined=chunk.quarantined,
+                        quarantine_status="pending" if chunk.quarantined else "clear",
                         trust_level=chunk.trust_level,
+                        metadata_json={"reason_codes": list(chunk.reason_codes)},
                         embedding_model=self._embedding_model if embedding is not None else None,
                         embedding_dimensions=self._embedding_dimensions
                         if embedding is not None
@@ -532,3 +535,114 @@ class PostgresIngestionRepository:
                     retryable=True,
                 )
             )
+
+    async def list_quarantined(
+        self, tenant_id: UUID, document_id: UUID | None, cursor: UUID | None, limit: int
+    ) -> tuple[list[dict[str, object]], UUID | None]:
+        async with self._database.tenant_session(tenant_id) as session:
+            statement = (
+                select(Chunk)
+                .where(Chunk.tenant_id == tenant_id, Chunk.quarantine_status == "pending")
+                .order_by(Chunk.id)
+                .limit(limit + 1)
+            )
+            if document_id is not None:
+                statement = statement.where(Chunk.document_id == document_id)
+            if cursor is not None:
+                statement = statement.where(Chunk.id > cursor)
+            rows = list((await session.execute(statement)).all())
+            has_more = len(rows) > limit
+            rows = rows[:limit]
+            items = [_quarantine_item(chunk, include_text=True) for (chunk,) in rows]
+            return items, (rows[-1][0].id if has_more and rows else None)
+
+    async def get_quarantined(self, tenant_id: UUID, chunk_id: UUID) -> dict[str, object] | None:
+        async with self._database.tenant_session(tenant_id) as session:
+            row = await session.execute(
+                select(Chunk).where(
+                    Chunk.tenant_id == tenant_id,
+                    Chunk.id == chunk_id,
+                    Chunk.quarantine_status == "pending",
+                )
+            )
+            result = row.one_or_none()
+            return _quarantine_item(result[0], include_text=True) if result else None
+
+    async def decide_quarantined(
+        self,
+        tenant_id: UUID,
+        actor_key_id: UUID,
+        chunk_id: UUID,
+        decision: str,
+        reason: str,
+        idempotency_hash: str,
+        request_digest: str,
+    ) -> tuple[str, object]:
+        from rag.domain.auth import IdempotencyConflict
+
+        async with self._database.tenant_session(tenant_id) as session:
+            await session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+                {"key": f"quarantine:{tenant_id}:{idempotency_hash}"},
+            )
+            existing = await session.scalar(
+                select(QuarantineDecision).where(
+                    QuarantineDecision.tenant_id == tenant_id,
+                    QuarantineDecision.idempotency_hash == idempotency_hash,
+                )
+            )
+            if existing is not None:
+                if existing.request_digest != request_digest:
+                    raise IdempotencyConflict("idempotency key conflicts with prior decision")
+                return existing.decision, {
+                    "chunk_id": str(existing.chunk_id),
+                    "decision": existing.decision,
+                    "reason": existing.reason,
+                    "decided_at": existing.created_at,
+                }
+            chunk = await session.scalar(
+                select(Chunk)
+                .where(
+                    Chunk.tenant_id == tenant_id,
+                    Chunk.id == chunk_id,
+                    Chunk.quarantine_status == "pending",
+                )
+                .with_for_update()
+            )
+            if chunk is None:
+                return "not_found", {}
+            chunk.quarantined = decision != "approve"
+            chunk.quarantine_status = "approved" if decision == "approve" else "rejected"
+            now = datetime.now(UTC)
+            session.add(
+                QuarantineDecision(
+                    id=uuid4(),
+                    tenant_id=tenant_id,
+                    chunk_id=chunk_id,
+                    actor_key_id=actor_key_id,
+                    decision=decision,
+                    reason=reason,
+                    idempotency_hash=idempotency_hash,
+                    request_digest=request_digest,
+                    created_at=now,
+                )
+            )
+            return "recorded", {
+                "chunk_id": str(chunk_id),
+                "decision": decision,
+                "reason": reason,
+                "decided_at": now,
+            }
+
+
+def _quarantine_item(chunk: Chunk, *, include_text: bool) -> dict[str, object]:
+    item: dict[str, object] = {
+        "chunk_id": str(chunk.id),
+        "document_id": str(chunk.document_id),
+        "page": chunk.page,
+        "reason_codes": chunk.metadata_json.get("reason_codes", []),
+        "created_at": chunk.created_at,
+    }
+    if include_text:
+        item["plain_text"] = chunk.content[:12_000]
+    return item

@@ -172,7 +172,9 @@ class Chunk(TenantRow, Base):
         "metadata", JSONB, nullable=False, server_default="{}"
     )
     quarantined: Mapped[bool] = mapped_column(nullable=False, server_default="false")
-    quarantine_status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="clear")
+    quarantine_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="clear"
+    )
     trust_level: Mapped[str] = mapped_column(String(16), nullable=False, server_default="untrusted")
     embedding_model: Mapped[str | None] = mapped_column(String(120))
     embedding_dimensions: Mapped[int | None] = mapped_column(Integer)
@@ -190,7 +192,9 @@ class QuarantineDecision(TenantRow, Base):
             ["tenant_id", "chunk_id"], ["chunks.tenant_id", "chunks.id"], ondelete="CASCADE"
         ),
         ForeignKeyConstraint(
-            ["tenant_id", "actor_key_id"], ["api_keys.tenant_id", "api_keys.id"], ondelete="RESTRICT"
+            ["tenant_id", "actor_key_id"],
+            ["api_keys.tenant_id", "api_keys.id"],
+            ondelete="RESTRICT",
         ),
         Index("ix_quarantine_tenant_created", "tenant_id", "created_at"),
     )
