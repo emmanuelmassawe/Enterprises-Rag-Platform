@@ -68,9 +68,12 @@ M5 implementation is committed in `1798f2d`, `c070409`, and `de0abcc`; this evid
 | Evaluation implementation | Versioned synthetic golden set, pure recall@k/MRR/nDCG/citation/refusal scoring, structured Gemini judge, optional LangSmith `evaluate()` experiment and `make eval` threshold gate | Implemented; report and thresholds remain baseline-only until owner approves numeric floors. |
 | Dataset and target | `tests/eval/golden_dataset.json`; existing admin debug query endpoint with synthetic benchmark chunk IDs | No staging endpoint, benchmark collection or credentials were available, so the end-to-end evaluation and live LangSmith experiment were not run. |
 | Provider/API verification | Current official LangSmith evaluate reference, LangSmith evaluation guidance, Google GenAI SDK and structured output references recorded in ADR-016 | Checked 2026-11-16. |
-| Tests | Deterministic metric and dataset tests; no live network or model calls in tests | Pending final M6 CI-equivalent verification below. |
+| Static quality | `uv run ruff check .`; `uv run ruff format --check .`; `uv run mypy src`; `uv run lint-imports` | Passed; 126 files formatted, 66 source files type-checked, both import contracts kept. |
+| Unit behavior and coverage | `uv run coverage run -m pytest -q -p no:cacheprovider --basetemp=C:/Users/EMMA/AppData/Local/Temp/rag-m6-pytest-20261116-r2`; `uv run coverage report --fail-under=80` | 107 passed; 83% branch-aware coverage; passed. The 4 new evaluation tests used no network or model calls. |
+| Diff integrity | `git diff --check` | Passed. |
+| End-to-end evaluation | `make eval` with configured non-production benchmark endpoint, admin key, collection and Gemini judge credentials | Not run; no staging endpoint, benchmark collection or credentials were available. |
 
-M6's synthetic dataset and provider setup assumptions are documented in [the evaluation guide](EVALUATION.md) and [ADR-016](ADR/ADR-016-milestone-6-evaluation-harness.md). Update this evidence with final test results before commit.
+M6's synthetic dataset and provider setup assumptions are documented in [the evaluation guide](EVALUATION.md) and [ADR-016](ADR/ADR-016-milestone-6-evaluation-harness.md). The end-to-end evaluation remains an owner/operator setup gate; unset thresholds do not assert quality.
 
 ## Remaining release gates
 
