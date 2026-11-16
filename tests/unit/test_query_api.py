@@ -35,7 +35,9 @@ class _Query:
     async def answer(self, **kwargs: object) -> QueryResultRecord:
         return QueryResultRecord(
             answer="" if self.refuse else "The policy allows leave.",
-            citations=() if self.refuse else (
+            citations=()
+            if self.refuse
+            else (
                 CitationRecord(
                     "chunk-1", "doc-1", "guide.pdf", 4, "Leave", "Annual leave is available."
                 ),
@@ -101,7 +103,11 @@ def test_sse_refusal_has_contract_fields_then_one_done_event() -> None:
             headers={"Authorization": "Bearer valid"},
             json={"question": "unknown?", "collection_ids": [str(uuid4())], "stream": True},
         )
-    events = [line.removeprefix("event: ") for line in response.text.splitlines() if line.startswith("event: ")]
+    events = [
+        line.removeprefix("event: ")
+        for line in response.text.splitlines()
+        if line.startswith("event: ")
+    ]
     assert events == ["retrieval_started", "citations", "refusal", "done"]
     assert '"code":"insufficient_evidence"' in response.text
 

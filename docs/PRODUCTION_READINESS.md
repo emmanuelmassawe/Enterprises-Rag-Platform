@@ -34,12 +34,15 @@ The local review endpoints require admin API-key scope, expose plain text only, 
 
 | Area | Evidence | Result |
 |---|---|---|
-| Static quality | Ruff, strict mypy, import-linter, API contract lint | Pending final run. |
-| Query behavior | RRF, refusal, citation validation, sanitization, cache fallback and tenant epoch tests | Pending final run. |
-| Database migration | Additive `query_logs.request_id` migration, upgrade and populated DB compatibility | Pending local database run. |
+| Static quality | `ruff check .`; `ruff format --check .`; `mypy src`; `lint-imports` | Passed. Domain and API layer contracts kept. |
+| Query behavior | Full suite covering RRF, refusal, citation validation, sanitization, cache fallback/epoch, provider schema and SSE | 89 passed; one Starlette/httpx deprecation warning. |
+| Coverage | `coverage run -m pytest -q -p no:cacheprovider --basetemp=.m4-test-tmp`; `coverage report --fail-under=80` | 83% branch-aware coverage; passed. |
+| Database migration | Local Compose migrator applied `c51b6d27e940`; `alembic check` | Passed; no schema drift detected on the existing populated local database. A fresh empty-database run was not repeated in M4. |
+| Container images | `docker compose build api worker migrator` | Passed. |
 | Provider integration | No live Gemini key or production data used | Not exercised; only deterministic tests. |
 | Performance | No model-pinned staging environment/load test available in M4 | Not measured; full generation completes before first answer event, so the proposed TTFT SLO remains at risk. |
-| API stream | Event sequence and terminal state contract | Pending SSE API tests. |
+| API stream | JSON/SSE TestClient contract, event sequence, refusal shape and one terminal event | Passed. |
+| OpenAPI Spectral | Approved `api/openapi.yaml` was unchanged in M4 | Not rerun; Node/Spectral is not installed in this workspace. |
 
 M4's proposed `gemini-3.8-flash`, query similarity/context thresholds, cache TTL and generation token/concurrency limits require owner confirmation. See [ADR-014](ADR/ADR-014-milestone-4-query-pipeline.md).
 

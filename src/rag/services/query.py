@@ -240,9 +240,7 @@ class QueryService:
         filters: dict[str, str | int | float | bool],
     ) -> list[RetrievedChunk]:
         try:
-            vectors = await self._embedding_breaker.call(
-                lambda: self._embeddings.embed([question])
-            )
+            vectors = await self._embedding_breaker.call(lambda: self._embeddings.embed([question]))
             if len(vectors) != 1 or len(vectors[0]) != self._embedding_dimensions:
                 raise QueryUnavailable("embedding_response_invalid")
             candidate_limit = min(100, max(8, top_k * 4))
