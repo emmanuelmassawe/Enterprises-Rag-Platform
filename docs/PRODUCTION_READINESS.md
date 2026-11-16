@@ -13,6 +13,7 @@ This file records completed checks and unresolved release gates. Passing a local
 | Tenant isolation | Runtime role selected one of two synthetic tenants with `app.tenant_id`; cross-tenant insert attempted | One tenant visible; cross-tenant insert rejected by RLS. |
 | Populated migration rerun | Re-applied `alembic upgrade head` after inserting two synthetic tenant rows | Passed; both synthetic rows remained. |
 | Runtime role | `rag_runtime` uses `NOSUPERUSER`, `NOCREATEDB`, `NOCREATEROLE`, `NOINHERIT`, `NOBYPASSRLS`; separate `rag_migrator` handles schema | Verified in local Compose schema and grants. |
+| Redis local services | `state` and `cache` health probes and `CONFIG GET` | Both responded `PONG`; state reports `noeviction`, cache reports `allkeys-lru` with 134217728-byte cap. |
 | Container image and HTTP health | `docker compose build api`; in-container requests to `/healthz` and `/readyz` | Build passed; liveness returned `ok` and readiness returned `ready`. |
 
 ## Remaining release gates

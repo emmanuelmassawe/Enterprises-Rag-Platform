@@ -51,7 +51,7 @@ Status: mixed. Milestone 2 authentication, rate limiting, persistence foundation
 | NFR-A11Y-001, UX-001 | ADR-009 | axe, Lighthouse, keyboard/SR and i18n E2E | accessibility score and issue count |
 | NFR-MAINT-001, TEST-001 | hexagonal layering, CI contract, 80% unit coverage gate | coverage, mypy, Ruff, import-linter, traceability CI | Local M2 static checks and 86% coverage passed; full adapter contract inventory remains planned |
 | NFR-OBS-001 | ADR-011 | telemetry/redaction tests and alert exercise | trace completeness, missing telemetry alerts |
-| NFR-PORT-001 | ADR-001, 005, 008, 011 | shared adapter contract suites/local composition | adapter conformance report |
+| NFR-PORT-001 | ADR-001, 005, 006, 008, 011, 012 | local Compose has separate Redis state/cache policies; shared adapter contract suites/local composition | adapter conformance report |
 | NFR-COMP-001 | ADR-009 | Playwright current/previous browser matrix | browser E2E pass rate |
 | NFR-COST-001 | ADR-008, 006 | provider reconciliation, spend-cap/kill-switch exercise | cost/query, spend/tenant, budget alert |
 | NFR-OPS-001 | ADR-004, 010, 012 | async lifecycle cleanup, readiness and migration/runtime role separation; later SIGTERM/deploy checks | local migration and role smoke, unit tests; staging deploy/rollback not yet run | request metrics and readiness live; deployment health/rollback metrics planned |

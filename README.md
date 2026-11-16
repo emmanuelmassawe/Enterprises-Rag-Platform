@@ -34,7 +34,7 @@ Prerequisites: Python 3.12 and [uv](https://docs.astral.sh/uv/); Docker Engine w
 
 ```powershell
 uv sync --all-groups
-docker compose up -d db state
+docker compose up -d db state cache
 make migrate
 docker compose up --build api
 ```
@@ -53,12 +53,14 @@ In another terminal, `make smoke` checks liveness and readiness. Or run `docker 
 | `METRICS_SCRAPE_TOKEN` | unset | Strong bearer secret required for `/metrics`; unset denies access. |
 | `DATABASE_URL` | Compose local runtime URL | Runtime Postgres connection using a non-owner role. |
 | `MIGRATION_DATABASE_URL` | Compose local migration URL | Privileged one-off migration connection; never used by API request handling. |
-| `REDIS_URL` | Compose local `state` URL | Redis control-state connection for distributed rate limits. |
+| `REDIS_URL` | Compose local `state` URL | Redis control-state connection for distributed rate limits (`noeviction`). |
 | `RATE_LIMIT_REQUESTS` | `60` | Per API key fixed-window request limit. |
 | `RATE_LIMIT_WINDOW_SECONDS` | `60` | Shared rate-limit window length. |
 | `RATE_LIMIT_MEMORY_FALLBACK_REQUESTS` | `10` | Stricter per-process limit used if Redis is unavailable. |
 | `RATE_LIMIT_MEMORY_FALLBACK_WINDOW_SECONDS` | `60` | Local fallback window length. |
 Copy `.env.example` to `.env` for local changes. Never commit `.env`.
+
+Compose also runs the separate `cache` Redis service with a 128 MiB cap and `allkeys-lru`, matching the approved state/cache split. The cache adapter is introduced with the query-cache milestone.
 
 ## Tooling
 

@@ -4,7 +4,7 @@ setup:
 	uv sync --all-groups
 
 dev:
-	docker compose up -d db state
+	docker compose up -d db state cache
 	docker compose --profile tools run --rm migrator
 	docker compose up --build api
 
