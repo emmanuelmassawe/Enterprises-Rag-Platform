@@ -12,15 +12,28 @@ from rag.adapters.postgres.query import PostgresQueryRepository
 from rag.adapters.redis.ingestion_queue import ArqIngestionQueue
 from rag.adapters.redis.query_cache import RedisQueryCache
 from rag.adapters.redis.rate_limiter import FallbackRateLimiter, MemoryRateLimiter, RedisRateLimiter
+from rag.adapters.tracing.langsmith import LangSmithTracer
 from rag.api.main import create_app
 from rag.core.config import get_settings
 from rag.db.session import Database
 from rag.domain.ports.ingestion import BlobStore
+from rag.domain.ports.tracing import LLMTracer, NoOpLLMTracer
 from rag.services.api_keys import ApiKeyService
 from rag.services.ingestion import HeuristicInjectionDetector, IngestionService
 from rag.services.query import QueryService
 
 settings = get_settings()
+llm_tracer: LLMTracer = (
+    LangSmithTracer(
+        settings.langsmith_api_key.get_secret_value(),
+        settings.langsmith_project,
+        settings.langsmith_endpoint,
+    )
+    if settings.langsmith_tracing and settings.langsmith_api_key is not None
+    else NoOpLLMTracer()
+)
+if isinstance(llm_tracer, LangSmithTracer):
+    llm_tracer.start()
 database = (
     Database(settings.database_url.get_secret_value())
     if settings.database_url is not None
@@ -116,6 +129,9 @@ query_service = (
         context_token_budget=settings.query_context_token_budget,
         max_output_tokens=settings.generation_max_output_tokens,
         cache_ttl_seconds=settings.query_cache_ttl_seconds,
+        input_pii_action=settings.ai_input_pii_action,
+        tracer=llm_tracer,
+        environment=settings.app_env,
     )
     if database is not None and query_embeddings is not None and answer_generator is not None
     else None
@@ -136,6 +152,7 @@ async def _cleanup() -> None:
         await answer_generator.close()
     if query_cache is not None:
         await query_cache.close()
+    await llm_tracer.close()
 
 
 app = create_app(

@@ -1,0 +1,19 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "panels": [
+    {"type":"timeseries","title":"HTTP requests / second","gridPos":{"h":8,"w":12,"x":0,"y":0},"targets":[{"expr":"sum by (route, status) (rate(rag_http_requests_total[5m]))","legendFormat":"{{route}} {{status}}"}]},
+    {"type":"timeseries","title":"HTTP request p95 latency","gridPos":{"h":8,"w":12,"x":12,"y":0},"targets":[{"expr":"histogram_quantile(0.95, sum by (le, route) (rate(rag_http_request_duration_seconds_bucket[5m])))","legendFormat":"{{route}}"}]},
+    {"type":"timeseries","title":"AI security events","gridPos":{"h":8,"w":12,"x":0,"y":8},"targets":[{"expr":"sum by (category, outcome) (rate(rag_ai_security_events_total[5m]))","legendFormat":"{{category}} {{outcome}}"}]},
+    {"type":"timeseries","title":"LangSmith export failures","gridPos":{"h":8,"w":12,"x":12,"y":8},"targets":[{"expr":"increase(rag_tracing_export_failures_total[15m])","legendFormat":"failures"}]}
+  ],
+  "schemaVersion": 39,
+  "tags": ["rag", "operations"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "title": "RAG Platform Operations",
+  "uid": "rag-platform-ops",
+  "version": 1
+}

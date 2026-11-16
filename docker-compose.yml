@@ -32,7 +32,13 @@ services:
       QUERY_CONTEXT_TOKEN_BUDGET: ${QUERY_CONTEXT_TOKEN_BUDGET:-6000}
       QUERY_MINIMUM_SIMILARITY: ${QUERY_MINIMUM_SIMILARITY:-0.35}
       QUERY_CACHE_TTL_SECONDS: ${QUERY_CACHE_TTL_SECONDS:-300}
-      METRICS_SCRAPE_TOKEN: ${METRICS_SCRAPE_TOKEN:-}
+      AI_INPUT_PII_ACTION: ${AI_INPUT_PII_ACTION:-flag}
+      METRICS_SCRAPE_TOKEN: ${METRICS_SCRAPE_TOKEN:-local-development-scrape-token-change-before-use-001}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
+      LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-rag-development}
+      LANGSMITH_ENDPOINT: ${LANGSMITH_ENDPOINT:-}
       RATE_LIMIT_REQUESTS: ${RATE_LIMIT_REQUESTS:-60}
       RATE_LIMIT_WINDOW_SECONDS: ${RATE_LIMIT_WINDOW_SECONDS:-60}
       RATE_LIMIT_MEMORY_FALLBACK_REQUESTS: ${RATE_LIMIT_MEMORY_FALLBACK_REQUESTS:-10}
@@ -168,6 +174,45 @@ services:
       retries: 10
     networks:
       - backend
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--web.enable-remote-write-receiver"]
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+    ports:
+      - "127.0.0.1:9090:9090"
+    profiles: ["observability"]
+    networks: [backend]
+
+  alloy:
+    image: grafana/alloy:v1.12.2
+    command: ["run", "/etc/alloy/config.alloy", "--server.http.listen-addr=0.0.0.0:12345"]
+    environment:
+      METRICS_SCRAPE_TOKEN: ${METRICS_SCRAPE_TOKEN:-local-development-scrape-token-change-before-use-001}
+    volumes:
+      - ./observability/alloy.config.alloy:/etc/alloy/config.alloy:ro
+    depends_on:
+      - prometheus
+    profiles: ["observability"]
+    networks: [backend]
+
+  grafana:
+    image: grafana/grafana:12.2.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-local-development-password-change-me}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    profiles: ["observability"]
+    networks: [backend]
 
 volumes:
   postgres_data:

@@ -16,6 +16,8 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
@@ -25,6 +27,7 @@ from rag.api.routers.query import router as query_router
 from rag.core.config import Settings, get_settings
 from rag.core.errors import ProblemException
 from rag.core.logging import configure_logging
+from rag.core.telemetry import configure_tracing, current_trace_id
 from rag.domain.ports.api_keys import ApiKeyApplication
 from rag.domain.ports.health import DependencyProbe
 from rag.domain.ports.rate_limiter import RateLimiter
@@ -93,12 +96,26 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         logger = structlog.get_logger("http").bind(request_id=request_id)
         started = time.perf_counter()
         try:
-            response = await call_next(request)
+            tracer = trace.get_tracer("rag.api")
+            with tracer.start_as_current_span("http.request") as span:
+                span.set_attribute("http.request.method", request.method)
+                span.set_attribute("rag.request_id", request_id)
+                request.state.trace_id = current_trace_id() or request_id
+                structlog.contextvars.bind_contextvars(trace_id=request.state.trace_id)
+                response = await call_next(request)
+                route = request.scope.get("route")
+                span.set_attribute(
+                    "http.route", getattr(route, "path", "unmatched")
+                )
+                span.set_attribute("http.response.status_code", response.status_code)
+                if response.status_code >= 500:
+                    span.set_status(Status(StatusCode.ERROR))
         except Exception:
             logger.exception("http_request_failed", method=request.method, path=request.url.path)
             raise
         duration = time.perf_counter() - started
         response.headers["X-Request-ID"] = request_id
+        response.headers["X-Trace-ID"] = getattr(request.state, "trace_id", request_id)
         rate_limit = getattr(request.state, "rate_limit", None)
         if rate_limit is not None:
             response.headers["RateLimit-Limit"] = str(rate_limit.limit)
@@ -210,6 +227,7 @@ def create_app(
     """Create an HTTP adapter with application ports supplied by the composition root."""
     resolved = settings or get_settings()
     configure_logging(resolved.log_level)
+    configure_tracing(resolved.otel_exporter_otlp_endpoint, resolved.app_name)
     runtime = RuntimeComponents(
         database_probe=database_probe,
         rate_limiter_probe=rate_limiter_probe,

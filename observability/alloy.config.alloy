@@ -1,0 +1,29 @@
+prometheus.scrape "rag_api" {
+  targets = [{ "__address__" = "api:8000" }]
+  metrics_path = "/metrics"
+  scrape_interval = "15s"
+  authorization {
+    type        = "Bearer"
+    credentials = sys.env("METRICS_SCRAPE_TOKEN")
+  }
+  forward_to = [prometheus.remote_write.local.receiver]
+}
+
+prometheus.remote_write "local" {
+  endpoint {
+    url = "http://prometheus:9090/api/v1/write"
+  }
+}
+
+otelcol.receiver.otlp "rag_api" {
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+  output {
+    traces = [otelcol.exporter.debug.local.input]
+  }
+}
+
+otelcol.exporter.debug "local" {
+  verbosity = "basic"
+}

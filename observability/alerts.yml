@@ -1,0 +1,26 @@
+groups:
+  - name: rag-platform
+    rules:
+      - alert: RagHighHttp5xxRate
+        expr: sum(rate(rag_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(rag_http_requests_total[5m])), 1) > 0.01
+        for: 5m
+        labels:
+          severity: ticket
+        annotations:
+          summary: HTTP server error rate is above 1% for five minutes
+          runbook: docs/RUNBOOK_AI_INCIDENTS.md
+      - alert: RagAiCanaryLeak
+        expr: increase(rag_ai_canary_leaks_total[1m]) > 0
+        for: 0m
+        labels:
+          severity: page
+        annotations:
+          summary: A model output contained the system prompt canary
+          runbook: docs/RUNBOOK_AI_INCIDENTS.md
+      - alert: RagTracingExportFailures
+        expr: increase(rag_tracing_export_failures_total[15m]) > 10
+        for: 5m
+        labels:
+          severity: ticket
+        annotations:
+          summary: More than ten LangSmith export failures occurred in fifteen minutes

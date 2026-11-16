@@ -53,11 +53,17 @@ class Settings(BaseSettings):
     query_context_token_budget: int = Field(default=6000, ge=256, le=32_000)
     query_minimum_similarity: float = Field(default=0.35, ge=0.0, le=1.0)
     query_cache_ttl_seconds: int = Field(default=300, ge=1, le=86_400)
+    ai_input_pii_action: Literal["flag", "redact", "block"] = "flag"
     rate_limit_requests: int = Field(default=60, ge=1, le=100_000)
     rate_limit_window_seconds: int = Field(default=60, ge=1, le=86_400)
     rate_limit_memory_fallback_requests: int = Field(default=10, ge=1, le=10_000)
     rate_limit_memory_fallback_window_seconds: int = Field(default=60, ge=1, le=86_400)
     metrics_scrape_token: SecretStr | None = None
+    otel_exporter_otlp_endpoint: str | None = Field(default=None, max_length=2_048)
+    langsmith_tracing: bool = False
+    langsmith_api_key: SecretStr | None = None
+    langsmith_project: str = Field(default="rag-development", min_length=1, max_length=128)
+    langsmith_endpoint: str | None = Field(default=None, max_length=2_048)
 
     @model_validator(mode="after")
     def production_requires_shared_dependencies(self) -> Self:
@@ -87,6 +93,7 @@ class Settings(BaseSettings):
         "embedding_api_key",
         "blob_access_key_id",
         "blob_secret_access_key",
+        "langsmith_api_key",
         mode="before",
     )
     @classmethod

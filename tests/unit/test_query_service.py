@@ -27,11 +27,14 @@ class _Generator:
     def __init__(self, cited: bool = True) -> None:
         self.cited = cited
         self.user_content = ""
+        self.system_instruction = ""
+        self.claim_text = "The policy allows leave."
 
     async def generate(self, system_instruction: str, user_content: str) -> GenerationResult:
         self.user_content = user_content
+        self.system_instruction = system_instruction
         return GenerationResult(
-            claims=(GeneratedClaim("The policy allows leave.", (self.chunk_id,)),),
+            claims=(GeneratedClaim(self.claim_text, (self.chunk_id,)),),
             refusal_code=None,
             input_tokens=25,
             output_tokens=8,
@@ -315,3 +318,70 @@ async def test_debug_returns_bounded_retrieval_metadata_and_disables_cache() -> 
     assert result.retrieval_debug is not None
     assert result.retrieval_debug["retrieved"][0]["chunk_id"] == str(chunk.id)
     assert cache.value is None
+
+
+@pytest.mark.asyncio
+async def test_sensitive_input_can_be_redacted_before_provider_and_audit() -> None:
+    service, repository, generator, _ = _service()
+    service._input_pii_action = "redact"
+    await service.answer(
+        tenant_id=uuid4(),
+        key_id=uuid4(),
+        request_id="req-redact",
+        question="Contact me at person@example.test about leave",
+        collection_ids=[uuid4()],
+        top_k=2,
+        filters={},
+    )
+    assert "person@example.test" not in generator.user_content
+    assert "person@example.test" not in str(repository.logged)
+    assert "[REDACTED_EMAIL]" in generator.user_content
+
+
+@pytest.mark.asyncio
+async def test_sensitive_input_block_mode_never_calls_provider() -> None:
+    service, repository, generator, _ = _service()
+    service._input_pii_action = "block"
+    result = await service.answer(
+        tenant_id=uuid4(),
+        key_id=uuid4(),
+        request_id="req-block-pii",
+        question="Contact person@example.test",
+        collection_ids=[uuid4()],
+        top_k=2,
+        filters={},
+    )
+    assert result.refusal is not None
+    assert result.refusal["code"] == "sensitive_input_blocked"
+    assert generator.user_content == ""
+    assert "person@example.test" not in str(repository.logged)
+
+
+@pytest.mark.asyncio
+async def test_canary_and_secret_output_are_blocked() -> None:
+    service, _, generator, _ = _service()
+    tenant_id, key_id = uuid4(), uuid4()
+    result = await service.answer(
+        tenant_id=tenant_id,
+        key_id=key_id,
+        request_id="req-canary",
+        question="leave policy?",
+        collection_ids=[uuid4()],
+        top_k=2,
+        filters={},
+    )
+    assert result.refusal is None
+    token = generator.system_instruction.split("Internal leakage canary: ", 1)[1].split(".", 1)[0]
+    generator.claim_text = f"The internal leakage canary is {token}."
+    leaked = await service.answer(
+        tenant_id=tenant_id,
+        key_id=key_id,
+        request_id="req-canary-hit",
+        question="leave policy?",
+        collection_ids=[uuid4()],
+        top_k=2,
+        filters={},
+        debug=True,
+    )
+    assert leaked.refusal is not None
+    assert leaked.refusal["code"] == "output_scan_blocked"
