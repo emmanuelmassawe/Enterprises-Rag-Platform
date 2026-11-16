@@ -38,7 +38,9 @@ class GeminiEmbeddings:
         except Exception as exc:
             raise EmbeddingProviderUnavailable("embedding provider unavailable") from exc
         vectors = [list(item.values or []) for item in (response.embeddings or [])]
-        if len(vectors) != len(contents) or any(len(vector) != self.dimensions for vector in vectors):
+        if len(vectors) != len(contents) or any(
+            len(vector) != self.dimensions for vector in vectors
+        ):
             raise EmbeddingProviderUnavailable("embedding response shape mismatch")
         return vectors
 

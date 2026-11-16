@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import OrderedDict
+from collections.abc import Awaitable
+from typing import Any, cast
 
 import redis.asyncio as redis
 import structlog
@@ -53,7 +55,7 @@ class RedisRateLimiter:
 
     @classmethod
     def from_url(cls, url: str, environment: str) -> RedisRateLimiter:
-        client = redis.from_url(
+        client = redis.from_url(  # type: ignore[no-untyped-call]
             url,
             decode_responses=True,
             socket_connect_timeout=1,
@@ -70,7 +72,10 @@ class RedisRateLimiter:
         bucket = now // window_seconds
         reset_at = (bucket + 1) * window_seconds
         key = f"rag:{self._environment}:{tenant_id}:ratelimit:{key_id}:{window_seconds}:{bucket}"
-        count_value = await self._client.eval(_INCREMENT_SCRIPT, 1, key, window_seconds + 1)
+        count_value = await cast(
+            Awaitable[Any],
+            self._client.eval(_INCREMENT_SCRIPT, 1, key, str(window_seconds + 1)),
+        )
         count = int(count_value)
         return RateLimitDecision(count <= limit, limit, max(0, limit - count), reset_at)
 

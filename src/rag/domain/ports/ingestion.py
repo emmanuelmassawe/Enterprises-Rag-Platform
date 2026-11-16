@@ -25,6 +25,10 @@ class QueueUnavailable(RuntimeError):
     """The durable ingestion queue cannot currently accept a job."""
 
 
+class StorageUnavailable(RuntimeError):
+    """Private object storage is temporarily unavailable."""
+
+
 @dataclass(frozen=True, slots=True)
 class IngestionChunk:
     ordinal: int
@@ -32,6 +36,7 @@ class IngestionChunk:
     page: int | None
     section: str | None
     quarantined: bool
+    trust_level: str = "untrusted"
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,7 +88,9 @@ class IngestionRepository(Protocol):
         limit: int,
     ) -> tuple[list[dict[str, object]], UUID | None]: ...
 
-    async def get_document(self, tenant_id: UUID, document_id: UUID) -> dict[str, object] | None: ...
+    async def get_document(
+        self, tenant_id: UUID, document_id: UUID
+    ) -> dict[str, object] | None: ...
 
     async def get_job(self, tenant_id: UUID, job_id: UUID) -> dict[str, object] | None: ...
 
@@ -128,6 +135,12 @@ class QueueBackend(Protocol):
     async def enqueue_delete(self, tenant_id: UUID, document_id: UUID, job_id: UUID) -> None: ...
 
     async def ping(self) -> bool: ...
+
+
+class InjectionDetector(Protocol):
+    """Identify instruction-like content before indexing or retrieval."""
+
+    def is_suspicious(self, content: str) -> bool: ...
 
 
 class IngestionApplication(Protocol):

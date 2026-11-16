@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-from rag.adapters.postgres.api_keys import PostgresApiKeyStore
-from rag.adapters.postgres.ingestion import PostgresIngestionRepository
 from rag.adapters.blob.local import LocalBlobStore
 from rag.adapters.blob.s3 import S3BlobStore
-from rag.adapters.redis.rate_limiter import FallbackRateLimiter, MemoryRateLimiter, RedisRateLimiter
+from rag.adapters.postgres.api_keys import PostgresApiKeyStore
+from rag.adapters.postgres.ingestion import PostgresIngestionRepository
 from rag.adapters.redis.ingestion_queue import ArqIngestionQueue
+from rag.adapters.redis.rate_limiter import FallbackRateLimiter, MemoryRateLimiter, RedisRateLimiter
 from rag.api.main import create_app
 from rag.core.config import get_settings
 from rag.db.session import Database
+from rag.domain.ports.ingestion import BlobStore
 from rag.services.api_keys import ApiKeyService
 from rag.services.ingestion import IngestionService
 
@@ -30,7 +31,7 @@ ingestion_queue = (
     if settings.redis_url is not None
     else None
 )
-blob_store = None
+blob_store: BlobStore | None = None
 if settings.blob_backend == "local":
     blob_store = LocalBlobStore(settings.blob_local_root)
 elif settings.blob_backend == "s3":

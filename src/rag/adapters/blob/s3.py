@@ -5,9 +5,9 @@ from __future__ import annotations
 import asyncio
 from typing import BinaryIO
 
-import boto3
-from botocore.config import Config
-from boto3.s3.transfer import TransferConfig
+import boto3  # type: ignore[import-untyped]
+from boto3.s3.transfer import TransferConfig  # type: ignore[import-untyped]
+from botocore.config import Config  # type: ignore[import-untyped]
 
 
 class S3BlobStore:

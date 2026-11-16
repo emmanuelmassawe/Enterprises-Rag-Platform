@@ -1,6 +1,8 @@
 """Validated runtime settings loaded from environment."""
 
 from functools import lru_cache
+from pathlib import Path
+from tempfile import gettempdir
 from typing import Literal
 
 from pydantic import Field, SecretStr, field_validator
@@ -25,14 +27,16 @@ class Settings(BaseSettings):
     migration_database_url: SecretStr | None = None
     redis_url: SecretStr | None = None
     blob_backend: Literal["local", "s3"] = "local"
-    blob_local_root: str = "/tmp/rag-blobs"
+    blob_local_root: str = Field(
+        default_factory=lambda: str(Path(gettempdir()) / "enterprise-rag-blobs")
+    )
     blob_bucket: str = "enterprise-rag-local"
     blob_endpoint_url: str | None = None
     blob_region: str = "us-east-1"
     blob_access_key_id: SecretStr | None = None
     blob_secret_access_key: SecretStr | None = None
     blob_max_upload_bytes: int = Field(default=104_857_600, ge=1_048_576, le=1_073_741_824)
-    blob_max_pages: int = Field(default=500, ge=1, le=2_000)
+    blob_max_pages: int = Field(default=250, ge=1, le=2_000)
     ingestion_max_queue_size: int = Field(default=500, ge=1, le=100_000)
     ingestion_max_concurrency: int = Field(default=2, ge=1, le=32)
     ingestion_chunk_chars: int = Field(default=2_400, ge=200, le=8_000)
@@ -53,7 +57,15 @@ class Settings(BaseSettings):
         """Accept conventional lowercase environment values while validating the result."""
         return level.upper() if isinstance(level, str) else level
 
-    @field_validator("database_url", "migration_database_url", "redis_url", "embedding_api_key", "blob_access_key_id", "blob_secret_access_key", mode="before")
+    @field_validator(
+        "database_url",
+        "migration_database_url",
+        "redis_url",
+        "embedding_api_key",
+        "blob_access_key_id",
+        "blob_secret_access_key",
+        mode="before",
+    )
     @classmethod
     def empty_connection_url_is_unset(cls, value: object) -> object:
         """Treat empty local environment variables as unset rather than malformed secrets."""

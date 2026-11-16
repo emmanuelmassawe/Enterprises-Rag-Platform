@@ -28,7 +28,12 @@ def test_readyz_reports_missing_dependencies_as_not_ready() -> None:
     assert response.status_code == 503
     assert response.json() == {
         "status": "not_ready",
-        "checks": {"api": "ok", "database": "not_configured", "rate_limiter": "local_fallback"},
+        "checks": {
+            "api": "ok",
+            "database": "not_configured",
+            "rate_limiter": "local_fallback",
+            "ingestion_queue": "not_configured",
+        },
     }
 
 

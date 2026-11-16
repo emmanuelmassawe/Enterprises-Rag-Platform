@@ -5,10 +5,18 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
-from sqlalchemy import delete, func, select, text, update
+from sqlalchemy import Text, cast, delete, func, select, text, update
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.dialects.postgresql import insert
 
-from rag.adapters.postgres.models import Chunk, Collection, Document, IdempotencyRecord, Job
+from rag.adapters.postgres.models import (
+    Chunk,
+    Collection,
+    Document,
+    IdempotencyRecord,
+    Job,
+    QueryLog,
+)
 from rag.db.session import Database
 from rag.domain.auth import IdempotencyConflict
 from rag.domain.ports.ingestion import IngestionChunk, QueueCapacityExceeded, UploadResult
@@ -61,11 +69,14 @@ class PostgresIngestionRepository:
                 text("SELECT pg_advisory_xact_lock(hashtext(:tenant_id))"),
                 {"tenant_id": str(tenant_id)},
             )
-            if await session.scalar(
-                select(Collection.id).where(
-                    Collection.tenant_id == tenant_id, Collection.id == collection_id
+            if (
+                await session.scalar(
+                    select(Collection.id).where(
+                        Collection.tenant_id == tenant_id, Collection.id == collection_id
+                    )
                 )
-            ) is None:
+                is None
+            ):
                 raise LookupError("collection_not_found")
             now = datetime.now(UTC)
             await session.execute(
@@ -132,7 +143,10 @@ class PostgresIngestionRepository:
                     raise LookupError("content_dedup_job_missing")
                 await session.execute(
                     update(IdempotencyRecord)
-                    .where(IdempotencyRecord.tenant_id == tenant_id, IdempotencyRecord.key_hash == idempotency_hash)
+                    .where(
+                        IdempotencyRecord.tenant_id == tenant_id,
+                        IdempotencyRecord.key_hash == idempotency_hash,
+                    )
                     .values(result_resource_id=duplicate.id)
                 )
                 return UploadResult(duplicate.id, prior_job.id, False)
@@ -397,8 +411,11 @@ class PostgresIngestionRepository:
                         page=chunk.page,
                         section=chunk.section,
                         quarantined=chunk.quarantined,
+                        trust_level=chunk.trust_level,
                         embedding_model=self._embedding_model if embedding is not None else None,
-                        embedding_dimensions=self._embedding_dimensions if embedding is not None else None,
+                        embedding_dimensions=self._embedding_dimensions
+                        if embedding is not None
+                        else None,
                     )
                 )
             document.status = "ready"
@@ -406,7 +423,9 @@ class PostgresIngestionRepository:
             await session.execute(
                 update(Job)
                 .where(Job.tenant_id == tenant_id, Job.id == job_id)
-                .values(status="ready", stage="ready", progress=100, error_code=None, retryable=False)
+                .values(
+                    status="ready", stage="ready", progress=100, error_code=None, retryable=False
+                )
             )
 
     async def fail_processing(
@@ -425,14 +444,36 @@ class PostgresIngestionRepository:
                     status="failed",
                     stage="failed",
                     error_code=error_code,
-                    retryable=error_code in {"embedding_provider_unavailable", "storage_unavailable"},
+                    retryable=error_code
+                    in {"embedding_provider_unavailable", "storage_unavailable"},
                 )
             )
 
     async def finish_deletion(self, tenant_id: UUID, document_id: UUID, job_id: UUID) -> None:
         async with self._database.tenant_session(tenant_id) as session:
+            chunk_ids = [
+                str(chunk_id)
+                for chunk_id in await session.scalars(
+                    select(Chunk.id).where(
+                        Chunk.tenant_id == tenant_id, Chunk.document_id == document_id
+                    )
+                )
+            ]
+            if chunk_ids:
+                await session.execute(
+                    delete(QueryLog).where(
+                        QueryLog.tenant_id == tenant_id,
+                        QueryLog.retrieved_ids.op("?|")(cast(chunk_ids, ARRAY(Text))),
+                    )
+                )
             await session.execute(
                 delete(Chunk).where(Chunk.tenant_id == tenant_id, Chunk.document_id == document_id)
+            )
+            await session.execute(
+                delete(IdempotencyRecord).where(
+                    IdempotencyRecord.tenant_id == tenant_id,
+                    IdempotencyRecord.result_resource_id == document_id,
+                )
             )
             await session.execute(
                 update(Document)
