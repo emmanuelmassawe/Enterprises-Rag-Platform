@@ -27,7 +27,7 @@ Status: M2-M5 have implementation evidence. M5 wires OTel request spans, metadat
 | FR-ADM-001 | Admin-scoped quarantine review API and `quarantine_decisions` audit table | GET `/v1/admin/quarantine*`; POST `/v1/admin/quarantine/{id}` | Quarantine API auth, decision idempotency and audit repository tests | Review queue depth/age/decision counters planned |
 | FR-ADM-002 | Usage aggregation, API key service, status | `/v1/admin/usage`; `/v1/admin/api-keys*`; `/v1/admin/status` | `test_req_fr_adm_002_admin_scope` | usage/cost, admin endpoint errors |
 | FR-FBK-001 | Feedback service, query correlation, LangSmith adapter | POST `/v1/feedback` | `test_req_fr_fbk_001_feedback` | feedback rate, export failure counter |
-| FR-EVL-001 | Eval harness, version registry | offline `make eval`; no runtime endpoint | `test_req_fr_evl_001_golden_eval` | recall@k, groundedness, citation/refusal metrics |
+| FR-EVL-001 | `src/rag/domain/evaluation.py`, synthetic versioned golden set, Gemini judge and optional LangSmith experiment | Existing admin-only `POST /v1/query` debug response; offline scoring CLI `make eval` | `test_req_fr_evl_001_golden_eval`; deterministic metric unit tests | Local versioned JSON report; LangSmith experiment scores when enabled; owner-approved threshold failures |
 | FR-USG-001 | Usage ledger, provider wrapper, quota service | POST query; GET admin usage | `test_req_fr_usg_001_accounting` | token/cost estimate, tenant quota events |
 | FR-UI-001 | Web chat and citation renderer | query, feedback, conversation/messages | `test_req_fr_ui_001_chat_e2e` | Faro route/error/web vital; query SLO |
 | FR-UI-002 | i18n/theme/responsive/a11y system | UI routes | `test_req_fr_ui_002_locale_a11y` | Lighthouse, axe, browser E2E |

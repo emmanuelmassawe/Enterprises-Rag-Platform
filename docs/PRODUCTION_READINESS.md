@@ -61,6 +61,17 @@ M4's proposed `gemini-3.8-flash`, query similarity/context thresholds, cache TTL
 
 M5 implementation is committed in `1798f2d`, `c070409`, and `de0abcc`; this evidence update and final tests follow those commits. Remaining owner and staging release gates are listed in [ADR-015](ADR/ADR-015-milestone-5-observability-security.md) and [AI security](AI_SECURITY.md).
 
+## Milestone 6 evidence (2026-11-16)
+
+| Area | Evidence | Result |
+|---|---|---|
+| Evaluation implementation | Versioned synthetic golden set, pure recall@k/MRR/nDCG/citation/refusal scoring, structured Gemini judge, optional LangSmith `evaluate()` experiment and `make eval` threshold gate | Implemented; report and thresholds remain baseline-only until owner approves numeric floors. |
+| Dataset and target | `tests/eval/golden_dataset.json`; existing admin debug query endpoint with synthetic benchmark chunk IDs | No staging endpoint, benchmark collection or credentials were available, so the end-to-end evaluation and live LangSmith experiment were not run. |
+| Provider/API verification | Current official LangSmith evaluate reference, LangSmith evaluation guidance, Google GenAI SDK and structured output references recorded in ADR-016 | Checked 2026-11-16. |
+| Tests | Deterministic metric and dataset tests; no live network or model calls in tests | Pending final M6 CI-equivalent verification below. |
+
+M6's synthetic dataset and provider setup assumptions are documented in [the evaluation guide](EVALUATION.md) and [ADR-016](ADR/ADR-016-milestone-6-evaluation-harness.md). Update this evidence with final test results before commit.
+
 ## Remaining release gates
 
 - Confirm proposed `gemini-embedding-2` and 768 dimensions, account region, retention and spend limits; add a dimension-specific vector index in a new approved migration and benchmark it with tenant filters.

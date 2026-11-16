@@ -33,7 +33,10 @@ bootstrap:
 	docker compose --profile tools run --rm migrator python -m rag.db.bootstrap --tenant-name "$(TENANT_NAME)"
 
 # These targets are activated in the milestones that introduce their tools and data.
-eval tf-plan tf-apply:
+eval:
+	uv run python scripts/evaluate.py
+
+tf-plan tf-apply:
 	@echo "$@ is not available yet; it will be enabled in the milestone that introduces it."
 	@exit 2
 

@@ -41,6 +41,24 @@ flowchart LR
 1. Validate user/session/API key, tenant, collection ACL, quota, query size and conversation access.
 2. Check tenant/ACL/model/prompt/index-version cache; revalidate citation eligibility before a cache hit.
 3. Run dense vector and PostgreSQL FTS retrieval in RLS/ACL scope, merge with RRF; optional reranker is behind a port and enabled only when evaluation justifies it.
+
+### Evaluation (Milestone 6)
+
+1. A local CLI loads the versioned synthetic dataset and calls the existing admin-only debug query endpoint on an explicitly configured non-production collection.
+2. Provider-free domain functions score recall@k, MRR, nDCG, citation accuracy and refusal accuracy. An isolated Gemini judge adapter scores groundedness and answer relevance using structured output and bounded timeouts.
+3. The CLI writes a local JSON report and, when configured, records the same synthetic run as a LangSmith experiment. Numeric regression floors are owner-approved configuration; unset thresholds record a baseline only.
+
+```mermaid
+flowchart LR
+  Golden[Versioned synthetic golden set] --> CLI[make eval]
+  CLI --> Target[Admin debug query API\nnon-production only]
+  Target --> Scores[Recall MRR nDCG\ncitations and refusals]
+  Target --> Judge[Gemini judge port\ngroundedness and relevance]
+  Scores --> Report[Local JSON report]
+  Judge --> Report
+  Report --> Gate[Owner-approved metric floors]
+  Report -. synthetic examples and scores .-> LangSmith[Optional LangSmith experiment]
+```
 4. Assemble bounded context with per-request random delimiters; send no tools, secrets or cross-tenant data to the proposed Gemini model.
 5. Validate structured claims, citation chunk membership and output safety. Refuse if retrieval is empty or generated claims fail validation. Store request, token counts and retrieved chunk IDs in the tenant-scoped query audit table.
 6. Emit `rag.query.v1` events in contract order: retrieval started, verified citations, validated answer chunks or refusal, then one terminal event. Generation completes before answer chunks are emitted to preserve citation validity; TTFT needs staging measurement.
@@ -111,7 +129,7 @@ The live query path is `src/rag/api/routers/query.py` → `QueryService` → ten
 | NFR | Satisfying decision/component | Verification |
 |---|---|---|
 | NFR-PERF-001/002 | ADR-001 pgvector/FTS; ADR-003 RRF; ADR-008 bounded provider calls; ADR-014 candidate cap, context/output limits and async calls | Staging p95 retrieval/TTFT/full answer load test; no M4 performance claim until measured |
-| NFR-AI-001 | ADR-003 hybrid retrieval; ADR-008 evidence-grounded no-tool generation; ADR-014 minimum cosine threshold, RRF and insufficient-evidence refusal | M6 golden-set recall and refusal evaluation |
+| NFR-AI-001 | ADR-003 hybrid retrieval; ADR-008 evidence-grounded no-tool generation; ADR-014 minimum cosine threshold/RRF/refusal; ADR-016 versioned synthetic dataset, retrieval metrics, LLM judge and optional LangSmith experiment | `make eval`; numeric regression gates remain pending owner-approved thresholds |
 | NFR-AI-002 | ADR-008 structured generation; ADR-014 claim citation IDs validated against retrieved chunks before response | Invalid citation unit and contract tests |
 | NFR-SEC-001/003 | ADR-007 forced RLS plus explicit tenant/collection filters; ADR-014 eligibility rules for ready and clear/approved chunks | Postgres RLS integration checks and cross-tenant query tests |
 | NFR-PRIV-001 | ADR-011/015 allowlisted metadata-only telemetry; ADR-014 query data remains in tenant-scoped DB/cache and is not exported | Redaction unit tests; SDK serialized-export integration test, provider retention/deletion review and staging proof remain open |

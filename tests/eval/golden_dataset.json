@@ -1,0 +1,35 @@
+{
+  "dataset_version": "synthetic-rag-v1",
+  "pipeline_version": "query-v1",
+  "description": "Synthetic policy handbook questions and expected chunk IDs. No customer data.",
+  "examples": [
+    {
+      "id": "leave-entitlement",
+      "question": "How many annual leave days does a full-time employee receive each year?",
+      "expected_sources": ["10000000-0000-4000-8000-000000000001"],
+      "reference_answer": "Full-time employees receive 20 working days of annual leave per year.",
+      "expected_refusal": false
+    },
+    {
+      "id": "sick-leave-notice",
+      "question": "Who should an employee notify when they are too ill to work?",
+      "expected_sources": ["10000000-0000-4000-8000-000000000002"],
+      "reference_answer": "The employee should notify their manager before the workday begins.",
+      "expected_refusal": false
+    },
+    {
+      "id": "remote-work-equipment",
+      "question": "What equipment can remote employees request?",
+      "expected_sources": ["10000000-0000-4000-8000-000000000003"],
+      "reference_answer": "Remote employees may request a laptop and an external monitor.",
+      "expected_refusal": false
+    },
+    {
+      "id": "unknown-benefit",
+      "question": "What is the company's lunar travel allowance?",
+      "expected_sources": [],
+      "reference_answer": "The handbook does not define a lunar travel allowance.",
+      "expected_refusal": true
+    }
+  ]
+}

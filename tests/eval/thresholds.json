@@ -1,0 +1,10 @@
+{
+  "description": "Baseline-only until the owner reviews results and approves metric gates.",
+  "recall_at_k": null,
+  "mrr": null,
+  "ndcg": null,
+  "groundedness": null,
+  "answer_relevance": null,
+  "citation_accuracy": null,
+  "refusal_accuracy": null
+}

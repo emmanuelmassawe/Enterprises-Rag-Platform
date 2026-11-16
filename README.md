@@ -11,6 +11,7 @@ Foundation for a multi-tenant document question-answering service. The current i
 - [Glossary](docs/GLOSSARY.md)
 - [Traceability](docs/TRACEABILITY.md)
 - [UX outline](docs/UX.md)
+- [Evaluation guide](docs/EVALUATION.md)
 
 ## Requirements and API
 
@@ -104,7 +105,7 @@ Compose runs the separate `cache` Redis service with a 128 MiB cap and `allkeys-
 
 ## Tooling
 
-`make setup`, `make dev`, `make test`, `make lint`, `make typecheck`, `make migrate`, `make smoke`, `make security-audit`, `make redteam`, and `make load-test` are active. `make redteam` uses synthetic provider-free cases. `make load-test` requires explicit staging URL/API key/collection UUID environment variables and never runs against production by default. Coverage gate is 80%. `eval` and Terraform targets remain unavailable until their milestones. CI runs lint, strict typing, tests, red-team smoke, secret scan, dependency audit, and a container build. GitHub Actions use pinned commit SHAs and minimal permissions.
+`make setup`, `make dev`, `make test`, `make lint`, `make typecheck`, `make migrate`, `make smoke`, `make security-audit`, `make redteam`, `make load-test`, and `make eval` are active. `make redteam` uses synthetic provider-free cases. `make load-test` requires explicit staging URL/API key/collection UUID environment variables and never runs against production by default. `make eval` requires an explicitly configured non-production benchmark API, admin key, collection and Gemini judge credentials; it records a baseline until the owner approves numeric thresholds. Coverage gate is 80%. Terraform targets remain unavailable until their milestones. CI runs lint, strict typing, tests, red-team smoke, secret scan, dependency audit, and a container build. GitHub Actions use pinned commit SHAs and minimal permissions.
 
 ## Security and operations
 
