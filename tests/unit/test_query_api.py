@@ -29,15 +29,20 @@ class _Limiter:
 
 
 class _Query:
+    def __init__(self, refuse: bool = False) -> None:
+        self.refuse = refuse
+
     async def answer(self, **kwargs: object) -> QueryResultRecord:
         return QueryResultRecord(
-            answer="The policy allows leave.",
-            citations=(
+            answer="" if self.refuse else "The policy allows leave.",
+            citations=() if self.refuse else (
                 CitationRecord(
                     "chunk-1", "doc-1", "guide.pdf", 4, "Leave", "Annual leave is available."
                 ),
             ),
-            refusal=None,
+            refusal={"code": "insufficient_evidence", "message": "No supported answer."}
+            if self.refuse
+            else None,
             input_tokens=12,
             output_tokens=7,
             estimated_cost_usd=None,
@@ -45,13 +50,13 @@ class _Query:
         )
 
 
-def _client(role: Role = Role.VIEWER) -> TestClient:
+def _client(role: Role = Role.VIEWER, *, refuse: bool = False) -> TestClient:
     principal = Principal(uuid4(), uuid4(), frozenset({Scope.READ}), role)
     app = create_app(
         Settings(app_env="test"),
         api_key_application=_KeyApplication(principal),
         rate_limiter=_Limiter(),
-        query_service=_Query(),
+        query_service=_Query(refuse),
     )
     return TestClient(app)
 
@@ -70,7 +75,7 @@ def test_query_json_returns_citations_and_usage() -> None:
     assert "estimated_cost_usd" in payload["usage"]
 
 
-def test_query_sse_obeys_event_order_and_one_terminal_event() -> None:
+def test_req_fr_qry_003_sse_obeys_event_order_and_one_terminal_event() -> None:
     with _client() as client:
         response = client.post(
             "/v1/query",
@@ -79,9 +84,7 @@ def test_query_sse_obeys_event_order_and_one_terminal_event() -> None:
         )
     text = response.text
     event_names = [
-        line.removeprefix("event: ")
-        for line in text.splitlines()
-        if line.startswith("event: ")
+        line.removeprefix("event: ") for line in text.splitlines() if line.startswith("event: ")
     ]
     assert response.headers["content-type"].startswith("text/event-stream")
     assert event_names[0] == "retrieval_started"
@@ -91,7 +94,19 @@ def test_query_sse_obeys_event_order_and_one_terminal_event() -> None:
     assert '"contract_version":"rag.query.v1"' in text
 
 
-def test_query_rejects_duplicate_collections() -> None:
+def test_sse_refusal_has_contract_fields_then_one_done_event() -> None:
+    with _client(refuse=True) as client:
+        response = client.post(
+            "/v1/query",
+            headers={"Authorization": "Bearer valid"},
+            json={"question": "unknown?", "collection_ids": [str(uuid4())], "stream": True},
+        )
+    events = [line.removeprefix("event: ") for line in response.text.splitlines() if line.startswith("event: ")]
+    assert events == ["retrieval_started", "citations", "refusal", "done"]
+    assert '"code":"insufficient_evidence"' in response.text
+
+
+def test_req_fr_qry_001_rejects_duplicate_collections() -> None:
     collection_id = str(uuid4())
     with _client() as client:
         response = client.post(

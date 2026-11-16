@@ -72,19 +72,21 @@ def _service(request: Request) -> QueryApplication:
     return cast(QueryApplication, service)
 
 
-def _output(result: QueryResultRecord, include_debug: bool) -> QueryOutput:
-    return QueryOutput(
-        answer=result.answer,
-        citations=[CitationOutput(**asdict(citation)) for citation in result.citations],
-        refusal=result.refusal,
-        usage={
+def _output(result: QueryResultRecord, include_debug: bool) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "answer": result.answer,
+        "citations": [asdict(citation) for citation in result.citations],
+        "refusal": result.refusal,
+        "usage": {
             "input_tokens": result.input_tokens,
             "output_tokens": result.output_tokens,
             "estimated_cost_usd": result.estimated_cost_usd,
         },
-        request_id=result.request_id,
-        retrieval_debug=result.retrieval_debug if include_debug else None,
-    )
+        "request_id": result.request_id,
+    }
+    if include_debug and result.retrieval_debug is not None:
+        payload["retrieval_debug"] = result.retrieval_debug
+    return payload
 
 
 def _event(name: str, request_id: str, **payload: object) -> bytes:
@@ -144,11 +146,9 @@ async def query(
         try:
             result = await _run_query(request, body, principal, service)
             output = _output(result, body.debug and principal.role == Role.ADMIN)
-            yield _event(
-                "citations", request_id, citations=[item.model_dump() for item in output.citations]
-            )
+            yield _event("citations", request_id, citations=output["citations"])
             if result.refusal is not None:
-                yield _event("refusal", request_id, refusal=result.refusal)
+                yield _event("refusal", request_id, **result.refusal)
             else:
                 # The validated response is emitted in provisional pieces per the contract.
                 for sequence, offset in enumerate(range(0, len(result.answer), 128), start=1):
@@ -161,7 +161,7 @@ async def query(
                         sequence=sequence,
                     )
                     await asyncio.sleep(0)
-            yield _event("done", request_id, usage=output.usage)
+            yield _event("done", request_id, usage=output["usage"])
         except ProblemException as exc:
             yield _event(
                 "error",

@@ -116,7 +116,7 @@ The live query path is `src/rag/api/routers/query.py` → `QueryService` → ten
 | NFR-SEC-001/003 | ADR-007 forced RLS plus explicit tenant/collection filters; ADR-014 eligibility rules for ready and clear/approved chunks | Postgres RLS integration checks and cross-tenant query tests |
 | NFR-PRIV-001 | ADR-011 planned redaction/export policy; ADR-014 query data remains in tenant-scoped DB/cache and is not exported to observability providers | Audit/cache scope tests and M5 export redaction tests |
 | NFR-REL-001 | ADR-004 durable state separated from ADR-014 evictable cache; cache read/write failure falls through to query path | Redis fault tests and cache invalidation tests |
-| NFR-OPS-001 | ADR-014 bounded provider timeout, max output tokens, context size and request top-k | Timeout/error tests and staging capacity verification |
+| NFR-OPS-001 | ADR-014 bounded provider timeout, circuit breaker, max output tokens, context size and request top-k | Timeout/error tests and staging capacity verification |
 | NFR-MAINT-001/TEST-001 | ADR-014 query ports isolate Postgres, Gemini and Redis adapters; API layer depends only on the query port | import-linter, strict mypy, port-contract tests and >=80% coverage |
 
 ## Observability and privacy

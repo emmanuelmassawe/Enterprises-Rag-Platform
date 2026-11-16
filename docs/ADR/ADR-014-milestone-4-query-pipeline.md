@@ -16,6 +16,7 @@ Milestone 4 connects tenant-scoped hybrid search to fixed, no-tool answer genera
 4. RRF is implemented. Reranking is deferred because no approved model or evaluation evidence is available to justify its latency and cost. ADR-003 remains the design authority; enabling a reranker requires measured evaluation and a new owner-approved decision.
 5. Redis response caching is tenant-scoped, short-lived, versioned by prompt/model/config and tenant epoch. Payloads live in the evictable cache service; epoch counters live in the no-eviction state service. Cache hits re-read citation eligibility from PostgreSQL. Ingestion completion, document deletion and quarantine decisions increment the tenant epoch. Cache read/write errors fail open.
 6. A new nullable `query_logs.request_id` field provides request correlation without requiring a destructive M2 table change. The audit row is written before a successful response is returned; audit failure fails the query closed with a retryable service error.
+7. Query embedding and answer generation each use an in-process asynchronous circuit breaker: five consecutive provider failures open the circuit for 30 seconds, after which a single probe may test recovery. Calls use explicit provider timeouts; no application retry is added because the provider operations are externally billed and automatic retry semantics must be measured and bounded.
 
 ## Consequences
 

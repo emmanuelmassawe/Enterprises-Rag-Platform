@@ -86,7 +86,13 @@ Media type `text/event-stream`; each event `data` is one JSON object with `contr
 | `done` | `request_id`, `usage`, `langsmith_run_id?` | Normal terminal; run ID admin-only, optional. |
 | `error` | `problem` | Terminal Problem Details payload; reconnect is not a retry. |
 
-Reconnection: `POST /v1/query` is not automatically resumable; `Last-Event-ID` is ignored and the client must explicitly retry with a new request. `AbortController` cancels client work. Server cancellation is best effort, bounded by provider timeout. Duplicate query retries can incur cost and may create a new message; idempotency is not promised. For durable history, query with `conversation_id` and read messages. Proxy buffering must be disabled and heartbeat comments sent at a bounded interval. No raw prompt or chunk text is emitted as metadata. (SSE schema is included in the OpenAPI `x-sse-contract` extension because OpenAPI 3.1 does not standardize event-stream schemas.)
+### Milestone 4 service behavior
+
+The M4 implementation completes structured generation and citation validation before it emits the `citations` event and answer chunks. The chunks split the validated answer for transport; they are not provider-token streaming. This preserves citation-before-answer ordering and prevents unvalidated claims from entering the stream, while putting the proposed time-to-first-token objective at risk. Staging load tests must measure this path before any latency claim.
+
+`conversation_id` is accepted as specified, but M4 does not load conversation history or persist messages. Conversation storage and ownership flows are scheduled for Milestone 8. `debug` is honored only for admin principals; ordinary readers never receive retrieval internals. Cache hits revalidate every citation against a ready document and an eligible chunk before returning.
+
+Reconnection: `POST /v1/query` is not automatically resumable; `Last-Event-ID` is ignored and the client must explicitly retry with a new request. `AbortController` cancels client work. Server cancellation is best effort, bounded by provider timeout. Duplicate query retries can incur cost; idempotency is not promised. Conversation history becomes available after Milestone 8. Proxy buffering must be disabled. No raw prompt or chunk text is emitted as metadata. (SSE schema is included in the OpenAPI `x-sse-contract` extension because OpenAPI 3.1 does not standardize event-stream schemas.)
 
 ## Authentication and authorization
 

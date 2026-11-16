@@ -8,7 +8,7 @@ import re
 import secrets
 import time
 import unicodedata
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from uuid import UUID
 
 from rag.domain.ports.ingestion import InjectionDetector
@@ -25,6 +25,7 @@ from rag.domain.ports.query import (
     RetrievedChunk,
 )
 from rag.prompts.query_v1 import PROMPT_VERSION, SYSTEM_INSTRUCTION
+from rag.services.resilience import AsyncCircuitBreaker
 
 RRF_CONSTANT = 60
 ALLOWED_FILTERS = frozenset({"source", "department", "category", "tags"})
@@ -120,6 +121,8 @@ class QueryService:
         self._context_char_budget = context_token_budget * 4
         self._max_output_tokens = max_output_tokens
         self._cache_ttl_seconds = cache_ttl_seconds
+        self._embedding_breaker = AsyncCircuitBreaker()
+        self._generation_breaker = AsyncCircuitBreaker()
 
     async def answer(
         self,
@@ -182,6 +185,16 @@ class QueryService:
         result, input_tokens, output_tokens = await self._generate_result(
             normalized_question, selected, request_id
         )
+        if debug:
+            result = replace(
+                result,
+                retrieval_debug={
+                    "prompt_version": PROMPT_VERSION,
+                    "retrieved": [
+                        {"chunk_id": str(chunk.id), "score": chunk.score} for chunk in selected
+                    ],
+                },
+            )
         await self._record(
             tenant_id,
             key_id,
@@ -227,7 +240,9 @@ class QueryService:
         filters: dict[str, str | int | float | bool],
     ) -> list[RetrievedChunk]:
         try:
-            vectors = await self._embeddings.embed([question])
+            vectors = await self._embedding_breaker.call(
+                lambda: self._embeddings.embed([question])
+            )
             if len(vectors) != 1 or len(vectors[0]) != self._embedding_dimensions:
                 raise QueryUnavailable("embedding_response_invalid")
             candidate_limit = min(100, max(8, top_k * 4))
@@ -252,14 +267,20 @@ class QueryService:
         boundary = self._boundary(question, chunks)
         user_content = self._user_content(question, chunks, boundary)
         try:
-            generated = await self._generator.generate(SYSTEM_INSTRUCTION, user_content)
+            generated = await self._generation_breaker.call(
+                lambda: self._generator.generate(SYSTEM_INSTRUCTION, user_content)
+            )
         except Exception as exc:
             raise QueryUnavailable("generation_unavailable") from exc
         if generated.refusal_code is not None or not generated.claims:
+            code = (
+                "policy_refusal"
+                if generated.refusal_code == "policy_refusal"
+                else "insufficient_evidence"
+            )
             result = self._refusal(
-                "insufficient_evidence",
-                "The available sources don't support a reliable answer. "
-                "Try a different question or add more relevant material.",
+                code,
+                "The available sources or service policy do not support this answer.",
                 request_id,
                 generated.input_tokens,
                 generated.output_tokens,
