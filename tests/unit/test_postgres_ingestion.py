@@ -460,7 +460,7 @@ async def test_repository_progress_failure_and_delete_completion_are_tenant_scop
             IngestionChunk(0, "safe text", 1, None, False),
             IngestionChunk(1, "quarantined", 2, None, True),
         ],
-        [[0.1] * 768, None],
+        [[0.1] * 768, [0.1] * 768],
         2,
     )
     assert len(session.added) == 2

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from io import BytesIO
 from datetime import UTC, datetime
+from io import BytesIO
 from uuid import UUID, uuid4
 
 import pytest
@@ -519,7 +519,7 @@ def test_req_fr_adm_001_quarantine_review_is_admin_only_and_records_decision() -
     listed = client.get("/v1/admin/quarantine")
     detail = client.get(f"/v1/admin/quarantine/{chunk_id}")
     decision = client.post(
-        f"/v1/admin/quarantine/{chunk_id}/decision",
+        f"/v1/admin/quarantine/{chunk_id}",
         headers={"Idempotency-Key": "quarantine-key-012345678901234567"},
         json={"decision": "reject", "reason": "Instruction-like text"},
     )

@@ -14,8 +14,8 @@ from rag.adapters.postgres.models import (
     Document,
     IdempotencyRecord,
     Job,
-    QueryLog,
     QuarantineDecision,
+    QueryLog,
 )
 from rag.db.session import Database
 from rag.domain.auth import IdempotencyConflict

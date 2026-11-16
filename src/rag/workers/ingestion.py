@@ -110,7 +110,9 @@ async def process_document(
                 tenant_uuid, document_uuid, job_uuid, "pdf_no_extractable_text"
             )
             return
-        eligible = [(index, chunk) for index, chunk in enumerate(chunks) if not chunk.quarantined]
+        # Quarantined text still gets a vector so an audited approval can make it
+        # retrieval-eligible without reprocessing or losing the moderation decision.
+        eligible = list(enumerate(chunks))
         vectors: list[list[float] | None] = [None] * len(chunks)
         for offset in range(0, len(eligible), 64):
             batch = eligible[offset : offset + 64]

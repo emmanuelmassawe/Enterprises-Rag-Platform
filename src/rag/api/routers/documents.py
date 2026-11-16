@@ -496,7 +496,7 @@ async def get_quarantine_item(
     return item
 
 
-@router.post("/admin/quarantine/{chunk_id}/decision", operation_id="decideQuarantine")
+@router.post("/admin/quarantine/{chunk_id}", operation_id="decideQuarantine")
 async def decide_quarantine(
     request: Request,
     chunk_id: UUID,
