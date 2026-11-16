@@ -20,6 +20,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from rag.api.routers.api_keys import router as api_keys_router
+from rag.api.routers.documents import router as documents_router
 from rag.core.config import Settings, get_settings
 from rag.core.errors import ProblemException
 from rag.core.logging import configure_logging
@@ -43,6 +44,7 @@ class RuntimeComponents:
     rate_limiter: RateLimiter | None
     api_key_application: ApiKeyApplication | None
     cleanup: Callable[[], Awaitable[None]] | None
+    ingestion_queue_probe: DependencyProbe | None
 
 
 async def _dependency_checks(runtime: RuntimeComponents) -> dict[str, str]:
@@ -63,6 +65,15 @@ async def _dependency_checks(runtime: RuntimeComponents) -> dict[str, str]:
             )
         except Exception:
             checks["rate_limiter"] = "local_fallback"
+    if runtime.ingestion_queue_probe is None:
+        checks["ingestion_queue"] = "not_configured"
+    else:
+        try:
+            checks["ingestion_queue"] = (
+                "ok" if await runtime.ingestion_queue_probe.ping() else "unavailable"
+            )
+        except Exception:
+            checks["ingestion_queue"] = "unavailable"
     return checks
 
 
@@ -187,6 +198,10 @@ def create_app(
     database_probe: DependencyProbe | None = None,
     rate_limiter_probe: DependencyProbe | None = None,
     cleanup: Callable[[], Awaitable[None]] | None = None,
+    ingestion_service: Any | None = None,
+    ingestion_repository: Any | None = None,
+    blob_store: Any | None = None,
+    ingestion_queue: Any | None = None,
     clock: Callable[[], float] = time.time,
 ) -> FastAPI:
     """Create an HTTP adapter with application ports supplied by the composition root."""
@@ -198,6 +213,7 @@ def create_app(
         rate_limiter=rate_limiter,
         api_key_application=api_key_application,
         cleanup=cleanup,
+        ingestion_queue_probe=ingestion_queue,
     )
 
     @asynccontextmanager
@@ -218,11 +234,16 @@ def create_app(
     )
     app.add_middleware(RequestContextMiddleware)
     app.include_router(api_keys_router)
+    app.include_router(documents_router)
     app.state.settings = resolved
     app.state.database_probe = runtime.database_probe
     app.state.rate_limiter = runtime.rate_limiter
     app.state.api_key_service = runtime.api_key_application
     app.state.rate_limiter_probe = runtime.rate_limiter_probe
+    app.state.ingestion_service = ingestion_service
+    app.state.ingestion_repository = ingestion_repository
+    app.state.blob_store = blob_store
+    app.state.ingestion_queue = ingestion_queue
     app.state.clock = clock
     _register_error_handlers(app)
 
@@ -235,7 +256,11 @@ def create_app(
     async def readyz() -> JSONResponse:
         """Report API, database, and shared rate-limit state health."""
         checks = await _dependency_checks(runtime)
-        ready = checks["database"] == "ok" and checks["rate_limiter"] == "ok"
+        ready = (
+            checks["database"] == "ok"
+            and checks["rate_limiter"] == "ok"
+            and checks["ingestion_queue"] in {"ok", "not_configured"}
+        )
         return JSONResponse(
             status_code=200 if ready else 503,
             content={"status": "ready" if ready else "not_ready", "checks": checks},

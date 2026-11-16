@@ -1,0 +1,1 @@
+"""Bounded PDF extraction adapter."""

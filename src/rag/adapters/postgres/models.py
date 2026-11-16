@@ -123,11 +123,17 @@ class Document(TenantRow, Base):
     collection_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(512), nullable=False, server_default="")
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    page_count: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="queued")
     source: Mapped[str] = mapped_column(String(32), nullable=False, server_default="upload")
     metadata_json: Mapped[dict[str, Any]] = mapped_column(
         "metadata", JSONB, nullable=False, server_default="{}"
     )
+    quarantined: Mapped[bool] = mapped_column(nullable=False, server_default="false")
+    embedding_model: Mapped[str | None] = mapped_column(String(120))
+    embedding_dimensions: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -187,6 +193,8 @@ class Job(TenantRow, Base):
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="queued")
     progress: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    stage: Mapped[str | None] = mapped_column(String(80))
+    retryable: Mapped[bool] = mapped_column(nullable=False, server_default="false")
     error_code: Mapped[str | None] = mapped_column(String(80))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

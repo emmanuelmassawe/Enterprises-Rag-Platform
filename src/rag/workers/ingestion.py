@@ -1,0 +1,155 @@
+"""ARQ worker lifecycle and idempotent PDF ingestion task."""
+
+from __future__ import annotations
+
+import asyncio
+import random
+import tempfile
+from pathlib import Path
+from typing import Any, cast
+from uuid import UUID
+
+import structlog
+from arq import Retry
+from arq.connections import RedisSettings
+
+from rag.adapters.blob.local import LocalBlobStore
+from rag.adapters.blob.s3 import S3BlobStore
+from rag.adapters.embeddings.gemini import EmbeddingProviderUnavailable, GeminiEmbeddings
+from rag.adapters.pdf.parser import PdfRejected, parse_pdf
+from rag.adapters.postgres.ingestion import PostgresIngestionRepository
+from rag.core.config import get_settings
+from rag.db.session import Database
+from rag.domain.ports.ingestion import BlobStore, IngestionRepository
+from rag.services.ingestion import chunk_pages
+
+
+def _blob_store() -> BlobStore:
+    settings = get_settings()
+    if settings.blob_backend == "local":
+        return LocalBlobStore(settings.blob_local_root)
+    return S3BlobStore(
+        bucket=settings.blob_bucket,
+        region=settings.blob_region,
+        endpoint_url=settings.blob_endpoint_url,
+        access_key_id=settings.blob_access_key_id.get_secret_value()
+        if settings.blob_access_key_id
+        else None,
+        secret_access_key=settings.blob_secret_access_key.get_secret_value()
+        if settings.blob_secret_access_key
+        else None,
+    )
+
+
+async def startup(ctx: dict[str, Any]) -> None:
+    settings = get_settings()
+    if settings.database_url is None or settings.redis_url is None:
+        raise RuntimeError("DATABASE_URL and REDIS_URL are required by the ingestion worker")
+    if settings.embedding_api_key is None:
+        raise RuntimeError("EMBEDDING_API_KEY is required by the ingestion worker")
+    database = Database(settings.database_url.get_secret_value())
+    ctx["database"] = database
+    ctx["repository"] = PostgresIngestionRepository(database)
+    ctx["blob_store"] = _blob_store()
+    ctx["embeddings"] = GeminiEmbeddings(
+        settings.embedding_api_key.get_secret_value(),
+        settings.embedding_model,
+        settings.embedding_dimensions,
+        settings.embedding_timeout_seconds,
+    )
+
+
+async def shutdown(ctx: dict[str, Any]) -> None:
+    embeddings = ctx.get("embeddings")
+    if embeddings is not None:
+        await cast(GeminiEmbeddings, embeddings).close()
+    database = ctx.get("database")
+    if database is not None:
+        await cast(Database, database).dispose()
+
+
+async def process_document(
+    ctx: dict[str, Any], tenant_id: str, document_id: str, job_id: str
+) -> None:
+    """Parse, chunk, scan, embed, and atomically index one tenant's PDF."""
+    settings = get_settings()
+    tenant_uuid, document_uuid, job_uuid = UUID(tenant_id), UUID(document_id), UUID(job_id)
+    repository = cast(IngestionRepository, ctx["repository"])
+    blob_store = cast(BlobStore, ctx["blob_store"])
+    embeddings = cast(GeminiEmbeddings, ctx["embeddings"])
+    document = await repository.load_for_processing(tenant_uuid, document_uuid)
+    if document is None:
+        return
+    await repository.set_progress(tenant_uuid, document_uuid, job_uuid, "processing", 5)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(prefix="rag-ingest-", suffix=".pdf", delete=False) as handle:
+            temporary_path = Path(handle.name)
+            await blob_store.download(str(document["storage_key"]), handle)
+        await repository.set_progress(tenant_uuid, document_uuid, job_uuid, "processing", 20)
+        pages = await asyncio.to_thread(parse_pdf, temporary_path, settings.blob_max_pages)
+        chunks = chunk_pages(
+            pages,
+            max_chars=settings.ingestion_chunk_chars,
+            overlap_chars=settings.ingestion_chunk_overlap_chars,
+        )
+        if not chunks:
+            await repository.fail_processing(tenant_uuid, document_uuid, job_uuid, "pdf_no_extractable_text")
+            return
+        eligible = [(index, chunk) for index, chunk in enumerate(chunks) if not chunk.quarantined]
+        vectors: list[list[float] | None] = [None] * len(chunks)
+        for offset in range(0, len(eligible), 64):
+            batch = eligible[offset : offset + 64]
+            result = await embeddings.embed([chunk.content for _, chunk in batch])
+            for (index, _), vector in zip(batch, result, strict=True):
+                vectors[index] = vector
+            progress = min(90, 30 + (offset + len(batch)) * 60 // max(1, len(eligible)))
+            await repository.set_progress(tenant_uuid, document_uuid, job_uuid, "processing", progress)
+        await repository.finish_processing(
+            tenant_uuid, document_uuid, job_uuid, chunks, vectors, len(pages)
+        )
+        structlog.get_logger("worker").info(
+            "ingestion_completed",
+            tenant_id=str(tenant_uuid),
+            document_id=str(document_uuid),
+            job_id=str(job_uuid),
+            page_count=len(pages),
+            chunk_count=len(chunks),
+            quarantined_count=sum(chunk.quarantined for chunk in chunks),
+        )
+    except PdfRejected as exc:
+        await repository.fail_processing(tenant_uuid, document_uuid, job_uuid, str(exc))
+    except EmbeddingProviderUnavailable:
+        attempt = int(ctx.get("job_try", 1))
+        if attempt < 3:
+            await repository.set_progress(tenant_uuid, document_uuid, job_uuid, "queued", 20)
+            raise Retry(defer=min(30, 2**attempt + random.random() * 2)) from None
+        await repository.fail_processing(
+            tenant_uuid, document_uuid, job_uuid, "embedding_provider_unavailable"
+        )
+    except Exception:
+        structlog.get_logger("worker").exception(
+            "ingestion_failed", tenant_id=str(tenant_uuid), document_id=str(document_uuid)
+        )
+        await repository.fail_processing(tenant_uuid, document_uuid, job_uuid, "ingestion_failed")
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
+class WorkerSettings:
+    """ARQ registration and bounded worker settings."""
+
+    functions = [process_document]
+    on_startup = startup
+    on_shutdown = shutdown
+    max_jobs = get_settings().ingestion_max_concurrency
+    max_tries = 3
+    job_timeout = 300
+    keep_result = 60
+    queue_name = "rag:ingestion"
+    redis_settings = RedisSettings.from_dsn(
+        get_settings().redis_url.get_secret_value()
+        if get_settings().redis_url is not None
+        else "redis://localhost:6379/0"
+    )
