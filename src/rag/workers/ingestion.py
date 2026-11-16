@@ -12,6 +12,7 @@ from uuid import UUID
 import structlog
 from arq import Retry
 from arq.connections import RedisSettings
+from prometheus_client import Counter, start_http_server
 
 from rag.adapters.blob.local import LocalBlobStore
 from rag.adapters.blob.s3 import S3BlobStore
@@ -25,6 +26,12 @@ from rag.domain.ports.ingestion import BlobStore, IngestionRepository
 from rag.services.ingestion import chunk_pages
 
 worker_settings = get_settings()
+JOB_OUTCOMES = Counter(
+    "rag_ingestion_jobs_total", "Ingestion and deletion job outcomes", ["operation", "outcome"]
+)
+DEAD_LETTER_JOBS = Counter(
+    "rag_dead_letter_jobs_total", "Jobs exhausted after bounded retry", ["operation"]
+)
 
 
 def _blob_store() -> BlobStore:
@@ -66,9 +73,21 @@ async def startup(ctx: dict[str, Any]) -> None:
         ctx["query_cache"] = RedisQueryCache(
             settings.redis_url.get_secret_value(), settings.cache_redis_url.get_secret_value()
         )
+    metrics_server, metrics_thread = start_http_server(
+        settings.worker_metrics_port, addr="0.0.0.0"
+    )
+    ctx["metrics_server"] = metrics_server
+    ctx["metrics_thread"] = metrics_thread
 
 
 async def shutdown(ctx: dict[str, Any]) -> None:
+    metrics_server = ctx.get("metrics_server")
+    if metrics_server is not None:
+        metrics_server.shutdown()
+        metrics_server.server_close()
+        metrics_thread = ctx.get("metrics_thread")
+        if metrics_thread is not None:
+            metrics_thread.join(timeout=1)
     embeddings = ctx.get("embeddings")
     if embeddings is not None:
         await cast(GeminiEmbeddings, embeddings).close()
@@ -145,6 +164,7 @@ async def process_document(
             tenant_uuid, document_uuid, job_uuid, chunks, vectors, len(pages)
         )
         await _invalidate_query_cache(ctx, tenant_uuid)
+        JOB_OUTCOMES.labels("ingestion", "succeeded").inc()
         structlog.get_logger("worker").info(
             "ingestion_completed",
             tenant_id=str(tenant_uuid),
@@ -156,6 +176,7 @@ async def process_document(
         )
     except PdfRejected as exc:
         await repository.fail_processing(tenant_uuid, document_uuid, job_uuid, str(exc))
+        JOB_OUTCOMES.labels("ingestion", "rejected").inc()
     except EmbeddingProviderUnavailable:
         attempt = int(ctx.get("job_try", 1))
         if attempt < 3:
@@ -164,11 +185,17 @@ async def process_document(
         await repository.fail_processing(
             tenant_uuid, document_uuid, job_uuid, "embedding_provider_unavailable"
         )
+        JOB_OUTCOMES.labels("ingestion", "dead_letter").inc()
+        DEAD_LETTER_JOBS.labels("ingestion").inc()
     except Exception:
-        structlog.get_logger("worker").exception(
-            "ingestion_failed", tenant_id=str(tenant_uuid), document_id=str(document_uuid)
-        )
+        attempt = int(ctx.get("job_try", 1))
+        if attempt < 3:
+            await repository.set_progress(tenant_uuid, document_uuid, job_uuid, "queued", 20)
+            raise Retry(defer=min(30, 2**attempt + secrets.randbelow(2000) / 1000)) from None
+        structlog.get_logger("worker").exception("ingestion_failed")
         await repository.fail_processing(tenant_uuid, document_uuid, job_uuid, "ingestion_failed")
+        JOB_OUTCOMES.labels("ingestion", "dead_letter").inc()
+        DEAD_LETTER_JOBS.labels("ingestion").inc()
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
@@ -191,6 +218,7 @@ async def process_delete(
             await blob_store.delete(storage_key)
         await repository.finish_deletion(tenant_uuid, document_uuid, job_uuid)
         await _invalidate_query_cache(ctx, tenant_uuid)
+        JOB_OUTCOMES.labels("deletion", "succeeded").inc()
         structlog.get_logger("worker").info(
             "document_deletion_completed",
             tenant_id=tenant_id,
@@ -202,6 +230,8 @@ async def process_delete(
         if attempt < 3:
             raise Retry(defer=min(30, 2**attempt + secrets.randbelow(2000) / 1000)) from None
         await repository.fail_deletion(tenant_uuid, job_uuid)
+        JOB_OUTCOMES.labels("deletion", "dead_letter").inc()
+        DEAD_LETTER_JOBS.labels("deletion").inc()
 
 
 class WorkerSettings:

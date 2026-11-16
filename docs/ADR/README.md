@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-Status: ADR-001 through ADR-011 were approved with Phase 0. ADR-012 records Milestone 2 and ADR-013 Milestone 3. ADR-014 records Milestone 4 query implementation choices and is proposed for owner review at the Milestone 4 gate.
+Status: ADR-001 through ADR-011 were approved with Phase 0. ADR-012 records Milestone 2, ADR-013 Milestone 3, ADR-014 Milestone 4, and ADR-015 records the Milestone 5 implementation and remaining production gates.
 
 | ADR | Decision |
 |---|---|
@@ -18,4 +18,5 @@ Status: ADR-001 through ADR-011 were approved with Phase 0. ADR-012 records Mile
 | [ADR-012](ADR-012-milestone-2-persistence-and-auth.md) | Milestone 2 implementation choices for async persistence, forced RLS, hashed API keys, and Redis rate limiting. |
 | [ADR-013](ADR-013-milestone-3-ingestion.md) | Bounded PDF ingestion, private blob storage, ARQ jobs, Gemini embeddings, and audited quarantine review. |
 | [ADR-014](ADR-014-milestone-4-query-pipeline.md) | Tenant-scoped hybrid retrieval, structured Gemini generation, citation checks, SSE and versioned cache. |
+| [ADR-015](ADR-015-milestone-5-observability-security.md) | OpenTelemetry, metadata-only LangSmith runs, Grafana local metrics, worker failure accounting and AI security controls. |
 

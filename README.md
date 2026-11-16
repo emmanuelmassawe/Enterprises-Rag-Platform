@@ -1,6 +1,6 @@
 # Enterprise RAG Platform
 
-Foundation for a multi-tenant document question-answering service. The current implementation provides the FastAPI process, PostgreSQL schema with tenant RLS, hashed API-key authentication, Redis-backed rate limiting and ingestion jobs, protected metrics, health routes, private PDF ingestion, page-aware chunking, Gemini embeddings, quarantine review, and a local API/worker container workflow. Milestone 4 adds tenant-scoped hybrid retrieval, guarded Gemini answers, citation validation, SSE and a versioned answer cache. The web UI remains a later milestone.
+Foundation for a multi-tenant document question-answering service. The current implementation provides the FastAPI process, PostgreSQL schema with tenant RLS, hashed API-key authentication, Redis-backed rate limiting and ingestion jobs, protected metrics, health routes, private PDF ingestion, page-aware chunking, Gemini embeddings, quarantine review, and a local API/worker container workflow. Milestone 4 adds tenant-scoped hybrid retrieval, guarded Gemini answers, citation validation, SSE and a versioned answer cache. Milestone 5 adds OTel request spans, metadata-only opt-in LangSmith runs, worker/job/query metrics, local Grafana/Prometheus observability, configurable PII input handling, output canary/secret scanning, and synthetic red-team smoke cases. The web UI remains a later milestone.
 
 ## Contents
 
@@ -35,6 +35,11 @@ flowchart LR
   API --> SSE[/POST /v1/query: JSON or SSE/]
   API --> Health[/healthz + /readyz/]
   API --> Metrics[Protected /metrics]
+  API --> OTel[Redacted OTel spans]
+  OTel --> Alloy[Alloy OTLP receiver]
+  Alloy --> Prometheus[Local Prometheus]
+  Prometheus --> Grafana[Local Grafana dashboards/alerts]
+  API -. allowlisted metadata, opt in .-> LangSmith[LangSmith]
 ```
 
 The API follows a hexagonal package layout under `src/rag`: transport in `api`, validated settings and logging in `core`, application composition in `composition.py`, persistence and Redis adapters, and tenant/auth policies in domain and services.
@@ -62,6 +67,13 @@ In another terminal, `make smoke` checks liveness and readiness. Or run `docker 
 | `APP_ENV` | `development` | Environment: development, test, staging, production. |
 | `LOG_LEVEL` | `INFO` | Minimum structured log level. |
 | `METRICS_SCRAPE_TOKEN` | unset | Strong bearer secret required for `/metrics`; unset denies access. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | Optional OTLP/HTTP trace endpoint; local profile uses `http://alloy:4318/v1/traces`. |
+| `LANGSMITH_TRACING` | `false` | Opt in to metadata-only LangSmith runs; exporter does not receive prompts or outputs. |
+| `LANGSMITH_API_KEY` | unset | LangSmith key, required only when tracing is enabled. |
+| `LANGSMITH_PROJECT`, `LANGSMITH_ENDPOINT` | `rag-development`, unset | Environment-scoped project and optional regional API endpoint. Confirm region/retention with owner. |
+| `AI_INPUT_PII_ACTION` | `flag` | `flag`, `redact`, or `block` common email/credential-shaped query input; proposed default needs owner confirmation. |
+| `GENERATION_ENABLED` | `true` | Set false to disable generation while query requests return a safe refusal. |
+| `WORKER_METRICS_PORT` | `9000` | Internal worker Prometheus endpoint; bind only on the private service network. |
 | `DATABASE_URL` | Compose local runtime URL | Runtime Postgres connection using a non-owner role. |
 | `MIGRATION_DATABASE_URL` | Compose local migration URL | Privileged one-off migration connection; never used by API request handling. |
 | `REDIS_URL` | Compose local `state` URL | Redis control-state connection for distributed rate limits (`noeviction`). |
@@ -85,15 +97,17 @@ In another terminal, `make smoke` checks liveness and readiness. Or run `docker 
 | `QUERY_CACHE_TTL_SECONDS` | `300` | Maximum successful answer-cache lifetime; tenant epoch invalidates changed knowledge bases. |
 Copy `.env.example` to `.env` for local changes. Never commit `.env`.
 
+For local dashboards, set `OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4318/v1/traces` and run `docker compose --profile observability up --build`. Grafana is at `http://127.0.0.1:3000` (local admin password defaults to a public development-only value; override `GRAFANA_ADMIN_PASSWORD`). Prometheus is at `http://127.0.0.1:9090`. Local Alloy exports traces to its bounded debug sink; customer or production trace payloads must not be used. Grafana/Prometheus/Alloy image tags are version-pinned; digest pinning remains a deployment follow-up.
+
 Compose runs the separate `cache` Redis service with a 128 MiB cap and `allkeys-lru`. Query payloads use `cache`; tenant invalidation epochs use `state`. Local uploads and worker downloads use temporary space capped at 256 MiB; production ingress should also enforce the upload request-body limit.
 
 ## Tooling
 
-`make setup`, `make dev`, `make test`, `make lint`, `make typecheck`, `make migrate`, `make smoke`, and `make security-audit` are active. Coverage gate is 80%. `eval`, `redteam`, `load-test`, and Terraform targets remain unavailable until their milestones. CI runs lint, strict typing, tests, secret scan, dependency audit, and a container build. GitHub Actions use pinned commit SHAs and minimal permissions.
+`make setup`, `make dev`, `make test`, `make lint`, `make typecheck`, `make migrate`, `make smoke`, `make security-audit`, `make redteam`, and `make load-test` are active. `make redteam` uses synthetic provider-free cases. `make load-test` requires explicit staging URL/API key/collection UUID environment variables and never runs against production by default. Coverage gate is 80%. `eval` and Terraform targets remain unavailable until their milestones. CI runs lint, strict typing, tests, red-team smoke, secret scan, dependency audit, and a container build. GitHub Actions use pinned commit SHAs and minimal permissions.
 
 ## Security and operations
 
-The metrics endpoint is token-protected and should also be network-restricted by deployment configuration. Request IDs are bounded to a safe character set or regenerated. Logs omit request bodies, query strings, credentials and user identifiers. Liveness checks only the process. Readiness checks Postgres, the shared rate-limit store, and ingestion queue. Quarantine content is returned as plain text to authorized admins; clients must never interpret it as HTML. The scanner is heuristic and does not replace guarded-RAG safety rules in the approved architecture.
+The metrics endpoint is token-protected and should also be network-restricted by deployment configuration. Request IDs are bounded to a safe character set or regenerated. Logs omit request bodies, query strings, credentials and user identifiers. Traces use route templates and status only. LangSmith is disabled by default and receives allowlisted request metadata only. Liveness checks only the process. Readiness checks Postgres, the shared rate-limit store, and ingestion queue. Quarantine content is returned as plain text to authorized admins; clients must never interpret it as HTML. The scanner is heuristic and does not replace guarded-RAG safety rules in the approved architecture. See [AI security](docs/AI_SECURITY.md), [SLOs](docs/SLO.md) and the [incident runbook](docs/RUNBOOK_AI_INCIDENTS.md).
 
 The container runs as non-root, drops Linux capabilities in Compose, uses a read-only root filesystem, and has a liveness health check. The Python base image and local database/Redis images are pinned by immutable digests. See [architecture](docs/ARCHITECTURE.md) and the [decision records](docs/ADR/README.md).
 

@@ -132,6 +132,7 @@ query_service = (
         input_pii_action=settings.ai_input_pii_action,
         tracer=llm_tracer,
         environment=settings.app_env,
+        generation_enabled=settings.generation_enabled,
     )
     if database is not None and query_embeddings is not None and answer_generator is not None
     else None

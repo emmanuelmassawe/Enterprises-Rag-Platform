@@ -27,6 +27,7 @@ from rag.domain.ports.query import (
 from rag.domain.ports.tracing import LLMTracer, NoOpLLMTracer
 from rag.prompts.query_v1 import PROMPT_VERSION, SYSTEM_INSTRUCTION
 from rag.core.telemetry import current_trace_id
+from prometheus_client import Counter, Histogram
 from rag.security.events import emit_canary_leak, emit_security_event
 from rag.security.privacy import contains_sensitive, redact_text
 from rag.services.resilience import AsyncCircuitBreaker
@@ -37,6 +38,10 @@ MARKDOWN_IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 MARKDOWN_LINK = re.compile(r"\[([^\]]+)\]\((?:[^()]|\([^)]*\))*\)")
 HTML_TAG = re.compile(r"<[^>]*>")
 URL = re.compile(r"(?i)\b(?:https?://|www\.)\S+")
+QUERY_OUTCOMES = Counter(
+    "rag_query_requests_total", "Terminal query outcomes", ["outcome"]
+)
+QUERY_DURATION = Histogram("rag_query_duration_seconds", "Query use-case duration")
 
 
 def normalize_question(question: str, max_chars: int = 8_000) -> str:
@@ -115,6 +120,7 @@ class QueryService:
         input_pii_action: str = "flag",
         tracer: LLMTracer | None = None,
         environment: str = "development",
+        generation_enabled: bool = True,
     ) -> None:
         self._repository = repository
         self._embeddings = embeddings
@@ -132,6 +138,7 @@ class QueryService:
         self._canary_token = secrets.token_urlsafe(24)
         self._tracer = tracer or NoOpLLMTracer()
         self._environment = environment
+        self._generation_enabled = generation_enabled
         self._embedding_breaker = AsyncCircuitBreaker()
         self._generation_breaker = AsyncCircuitBreaker()
 
@@ -224,6 +231,17 @@ class QueryService:
             return result
 
         selected = self._fit_context(chunks)
+        if not self._generation_enabled:
+            result = self._refusal(
+                "generation_disabled",
+                "Answer generation is temporarily disabled. Retrieved sources are available for review.",
+                request_id,
+            )
+            await self._record(
+                tenant_id, key_id, request_id, normalized_question, result, 0, 0, started
+            )
+            self._trace_run(request_id, tenant_id, "generation_disabled", 0, 0, started)
+            return result
         result, input_tokens, output_tokens = await self._generate_result(
             normalized_question, selected, request_id, str(tenant_id), str(key_id)
         )
@@ -265,6 +283,9 @@ class QueryService:
         started: float,
     ) -> None:
         """Queue content-free run metadata; tracer failures cannot delay the answer."""
+        duration = max(0, time.perf_counter() - started)
+        QUERY_OUTCOMES.labels(outcome).inc()
+        QUERY_DURATION.observe(duration)
         tenant_ref = hashlib.sha256(str(tenant_id).encode()).hexdigest()[:16]
         self._tracer.record_run(
             {
@@ -276,7 +297,7 @@ class QueryService:
                 "prompt_version": PROMPT_VERSION,
                 "input_tokens": input_tokens,
                 "output_tokens": output_tokens,
-                "duration_ms": max(0, int((time.perf_counter() - started) * 1000)),
+                "duration_ms": int(duration * 1000),
                 "outcome": outcome,
             }
         )

@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     generation_timeout_seconds: float = Field(default=20.0, ge=1.0, le=120.0)
     generation_max_output_tokens: int = Field(default=1024, ge=64, le=8192)
     generation_max_concurrency: int = Field(default=8, ge=1, le=64)
+    generation_enabled: bool = True
     query_context_token_budget: int = Field(default=6000, ge=256, le=32_000)
     query_minimum_similarity: float = Field(default=0.35, ge=0.0, le=1.0)
     query_cache_ttl_seconds: int = Field(default=300, ge=1, le=86_400)
@@ -64,6 +65,7 @@ class Settings(BaseSettings):
     langsmith_api_key: SecretStr | None = None
     langsmith_project: str = Field(default="rag-development", min_length=1, max_length=128)
     langsmith_endpoint: str | None = Field(default=None, max_length=2_048)
+    worker_metrics_port: int = Field(default=9000, ge=1024, le=65535)
 
     @model_validator(mode="after")
     def production_requires_shared_dependencies(self) -> Self:

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import base64
+import binascii
 import json
 import re
 import unicodedata
@@ -30,6 +32,8 @@ INJECTION_PATTERNS = (
     ),
     re.compile(r"\b(system prompt|developer message|secret key|api key)\b", re.I),
     re.compile(r"\b(reveal|exfiltrate|print|show) (the )?(hidden|system|secret)\b", re.I),
+    re.compile(r"\b(puuza|sahau) maagizo ya (awali|mfumo)\b", re.I),
+    re.compile(r"\bonyesha maagizo ya mfumo\b", re.I),
 )
 
 
@@ -47,7 +51,14 @@ class HeuristicInjectionDetector:
     """Conservative instruction-pattern detector; suspicious content stays quarantined."""
 
     def is_suspicious(self, content: str) -> bool:
-        return any(pattern.search(content) for pattern in INJECTION_PATTERNS)
+        candidates = [content]
+        for token in re.findall(r"(?<![A-Za-z0-9+/])[A-Za-z0-9+/]{24,}={0,2}(?![A-Za-z0-9+/])", content):
+            try:
+                decoded = base64.b64decode(token, validate=True).decode("utf-8")
+            except (binascii.Error, UnicodeDecodeError, ValueError):
+                continue
+            candidates.append(decoded)
+        return any(pattern.search(candidate) for candidate in candidates for pattern in INJECTION_PATTERNS)
 
     def reason_codes(self, content: str) -> tuple[str, ...]:
         if not self.is_suspicious(content):

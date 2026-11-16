@@ -33,7 +33,15 @@ bootstrap:
 	docker compose --profile tools run --rm migrator python -m rag.db.bootstrap --tenant-name "$(TENANT_NAME)"
 
 # These targets are activated in the milestones that introduce their tools and data.
-eval redteam load-test tf-plan tf-apply:
+eval tf-plan tf-apply:
 	@echo "$@ is not available yet; it will be enabled in the milestone that introduces it."
 	@exit 2
+
+# Synthetic, provider-free smoke attacks for pull requests and local work.
+redteam:
+	uv run pytest -q tests/security
+
+# Requires explicit credentials and a synthetic tenant/collection on a non-production target.
+load-test:
+	uv run python scripts/load_test.py
 

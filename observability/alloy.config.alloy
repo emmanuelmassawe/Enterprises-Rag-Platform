@@ -1,6 +1,8 @@
 prometheus.scrape "rag_api" {
-  targets = [{ "__address__" = "api:8000" }]
-  metrics_path = "/metrics"
+  targets = [
+    { "__address__" = "api:8000", "service" = "api" },
+    { "__address__" = "worker:9000", "service" = "worker" },
+  ]
   scrape_interval = "15s"
   authorization {
     type        = "Bearer"

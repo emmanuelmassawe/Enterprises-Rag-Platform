@@ -1,6 +1,6 @@
 # Architecture
 
-Status: Phase 0 design approved; Milestones 2-4 implementation map. M4 implements the query API, hybrid retrieval, guarded generation, citation checks, SSE and tenant-versioned response cache. M5+ components remain planned.
+Status: Phase 0 design approved; Milestones 2-5 implementation map. M5 implements redacted request spans, optional metadata-only LangSmith export, query/worker metrics, local Alloy/Prometheus/Grafana wiring, and additional AI security controls. Staging alert exercises, nested LangSmith pipeline spans, and owner privacy/budget gates remain open.
 
 ## Context and containers
 
@@ -44,7 +44,7 @@ flowchart LR
 4. Assemble bounded context with per-request random delimiters; send no tools, secrets or cross-tenant data to the proposed Gemini model.
 5. Validate structured claims, citation chunk membership and output safety. Refuse if retrieval is empty or generated claims fail validation. Store request, token counts and retrieved chunk IDs in the tenant-scoped query audit table.
 6. Emit `rag.query.v1` events in contract order: retrieval started, verified citations, validated answer chunks or refusal, then one terminal event. Generation completes before answer chunks are emitted to preserve citation validity; TTFT needs staging measurement.
-7. M5 will add redacted trace export to LangSmith and platform telemetry through OTel/Alloy to Grafana Cloud. These exports are not wired in M4.
+7. M5 adds an OTel HTTP span with request ID, route template and response status. Optional LangSmith run export is asynchronous and metadata-only; it excludes raw prompts, retrieved text, outputs and user identifiers. Alloy scrapes API/worker Prometheus metrics and accepts OTLP traces. Local Prometheus/Grafana dashboards are available through the Compose `observability` profile.
 
 ```mermaid
 flowchart TD
@@ -100,7 +100,7 @@ flowchart LR
   Cache --> TTL[Every key TTL + tenant/ACL/model/prompt/index versions]
 ```
 
-Queue writes fail visibly when memory is full; ingestion endpoint returns retryable 503 and queue alerts fire. Query cache outage is fail-open. Cache payloads carry TTL, model/prompt/config version, tenant ID and a tenant epoch; hits revalidate cited chunks against ready documents and permitted quarantine states. Ingestion completion, document deletion and quarantine decisions increment the epoch in `rag-state`. Redis keys are tenant-scoped; no cached answer is shared across tenants. Cache hit/failure metrics and circuit breakers remain future observability/resilience work.
+Queue writes fail visibly when memory is full; ingestion endpoint returns retryable 503 and queue alerts are provisioned. Query cache outage is fail-open. Cache payloads carry TTL, model/prompt/config version, tenant ID and a tenant epoch; hits revalidate cited chunks against ready documents and permitted quarantine states. Ingestion completion, document deletion and quarantine decisions increment the epoch in `rag-state`. Redis keys are tenant-scoped; no cached answer is shared across tenants. Query-provider circuit breakers, worker outcome counters, query outcome/duration metrics, and tracing export failure metrics are implemented. Redis cache hit/failure metrics and a dedicated Redis outage dashboard remain open.
 
 ### Milestone 4 query implementation
 
@@ -114,14 +114,14 @@ The live query path is `src/rag/api/routers/query.py` → `QueryService` → ten
 | NFR-AI-001 | ADR-003 hybrid retrieval; ADR-008 evidence-grounded no-tool generation; ADR-014 minimum cosine threshold, RRF and insufficient-evidence refusal | M6 golden-set recall and refusal evaluation |
 | NFR-AI-002 | ADR-008 structured generation; ADR-014 claim citation IDs validated against retrieved chunks before response | Invalid citation unit and contract tests |
 | NFR-SEC-001/003 | ADR-007 forced RLS plus explicit tenant/collection filters; ADR-014 eligibility rules for ready and clear/approved chunks | Postgres RLS integration checks and cross-tenant query tests |
-| NFR-PRIV-001 | ADR-011 planned redaction/export policy; ADR-014 query data remains in tenant-scoped DB/cache and is not exported to observability providers | Audit/cache scope tests and M5 export redaction tests |
+| NFR-PRIV-001 | ADR-011/015 allowlisted metadata-only telemetry; ADR-014 query data remains in tenant-scoped DB/cache and is not exported | Redaction unit tests; SDK serialized-export integration test, provider retention/deletion review and staging proof remain open |
 | NFR-REL-001 | ADR-004 durable state separated from ADR-014 evictable cache; cache read/write failure falls through to query path | Redis fault tests and cache invalidation tests |
 | NFR-OPS-001 | ADR-014 bounded provider timeout, circuit breaker, max output tokens, context size and request top-k | Timeout/error tests and staging capacity verification |
 | NFR-MAINT-001/TEST-001 | ADR-014 query ports isolate Postgres, Gemini and Redis adapters; API layer depends only on the query port | import-linter, strict mypy, port-contract tests and >=80% coverage |
 
 ## Observability and privacy
 
-API and worker emit JSON logs and OTel traces/metrics with request ID, trace ID, build version and tenant pseudonym where allowed. Never use query text, user ID, request ID or document ID as metric labels. Raw prompts, retrieved text, API keys and PII are excluded from external telemetry; tracing uses allowlisted fields and async bounded export. LangSmith is for LLM runs/evals/feedback; Grafana Cloud is for service health, logs, metrics, traces and alerts. Grafana Faro is planned for browser errors/web vitals with message content excluded and identity masked. Every alert links to a runbook.
+API and worker emit JSON logs and metrics; API request spans include request/trace IDs, route template and status. Never use query text, user ID, request ID or document ID as metric labels. Raw prompts, retrieved text, API keys and PII are excluded from external telemetry; LangSmith uses allowlisted metadata and an async bounded queue. LangSmith nested stage traces/feedback remain incomplete. Local Grafana dashboards and Prometheus alert rules live in `observability/`; production Grafana Cloud contact points, retention, synthetic canary and log/trace links need deployment configuration. Grafana Faro is planned for browser errors/web vitals with message content excluded and identity masked. Every alert links to a runbook.
 
 ## Deployment view
 
@@ -194,7 +194,7 @@ See [ADR index](ADR/README.md). Main deliberate trade-offs: REST/SSE is simpler 
 | PRIV-001 | ADR-011 telemetry minimization; ADR-005 data lifecycle; BFF identity separation | Retention/provider deletion terms need owner confirmation. |
 | A11Y-001, UX-001, COMP-001 | ADR-009 Next.js UI and EN/SW localization; WCAG target in NFR | Browser/assistive tech tests required. |
 | MAINT-001, TEST-001, PORT-001 | Hexagonal layering, ingestion ports/adapters, Postgres/Redis adapters, OpenAPI source of truth; ADR-012/013 | M3 static checks and 81% branch-aware unit coverage passed; live provider contract coverage and performance verification remain. |
-| OBS-001 | ADR-011 OTel/Alloy/Grafana and optional LangSmith | Staging alert exercise and redaction proof required. |
+| OBS-001 | ADR-011/015 OTel request spans, bounded Prometheus metrics, worker outcome endpoint, optional content-free LangSmith exporter, Alloy/Grafana local profile | Middleware and exporter tests; full-stage/job trace correlation, cloud alert exercise and missing-telemetry alert remain staging gates. |
 | COST-001 | ADR-008 bounded model/context/token use; quotas, usage accounting, kill switch | Owner budgets absent; provider prices can change. |
 
 ## Open risks

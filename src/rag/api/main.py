@@ -102,6 +102,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                 span.set_attribute("rag.request_id", request_id)
                 request.state.trace_id = current_trace_id() or request_id
                 structlog.contextvars.bind_contextvars(trace_id=request.state.trace_id)
+                logger = logger.bind(trace_id=request.state.trace_id)
                 response = await call_next(request)
                 route = request.scope.get("route")
                 span.set_attribute(
@@ -111,7 +112,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                 if response.status_code >= 500:
                     span.set_status(Status(StatusCode.ERROR))
         except Exception:
-            logger.exception("http_request_failed", method=request.method, path=request.url.path)
+            logger.exception("http_request_failed", method=request.method)
             raise
         duration = time.perf_counter() - started
         response.headers["X-Request-ID"] = request_id
@@ -132,6 +133,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             status_code=response.status_code,
             duration_seconds=round(duration, 6),
         )
+        structlog.contextvars.clear_contextvars()
         return response
 
 
