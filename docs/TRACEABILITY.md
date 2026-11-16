@@ -49,7 +49,7 @@ Status: mixed. Milestone 2 authentication, rate limiting, persistence foundation
 | NFR-PRIV-001 | ADR-005, 011 | export payload and retention/deletion review | purge lag, trace export data audit |
 | NFR-AI-001/002 | ADR-003, 008, 009 | golden set and adversarial/browser tests | retrieval/groundedness/citation/refusal trends |
 | NFR-A11Y-001, UX-001 | ADR-009 | axe, Lighthouse, keyboard/SR and i18n E2E | accessibility score and issue count |
-| NFR-MAINT-001, TEST-001 | hexagonal layering, CI contract, 80% unit coverage gate | coverage, mypy, Ruff, import-linter, traceability CI | Local M2 static checks and coverage passed; full adapter contract inventory remains planned |
+| NFR-MAINT-001, TEST-001 | hexagonal layering, CI contract, 80% unit coverage gate | coverage, mypy, Ruff, import-linter, traceability CI | Local M2 static checks and 86% coverage passed; full adapter contract inventory remains planned |
 | NFR-OBS-001 | ADR-011 | telemetry/redaction tests and alert exercise | trace completeness, missing telemetry alerts |
 | NFR-PORT-001 | ADR-001, 005, 008, 011 | shared adapter contract suites/local composition | adapter conformance report |
 | NFR-COMP-001 | ADR-009 | Playwright current/previous browser matrix | browser E2E pass rate |
