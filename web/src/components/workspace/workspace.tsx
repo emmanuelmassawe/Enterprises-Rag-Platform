@@ -60,9 +60,6 @@ export function Workspace({ locale, email, displayName }: { locale: string; emai
   const isEditor = identity.data?.role === "editor" || isAdmin;
   const localeHref = locale === "en" ? "/sw" : "/en";
 
-  useEffect(() => {
-    document.documentElement.lang = locale;
-  }, [locale]);
   const createConversation = useCallback(async (): Promise<void> => {
     const created = await apiFetch<Conversation>("conversations", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: "New conversation" }) });
     await queryClient.invalidateQueries({ queryKey: ["conversations"] });
