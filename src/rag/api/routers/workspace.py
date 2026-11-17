@@ -97,13 +97,6 @@ def _page(items: list[dict[str, object]], next_cursor: UUID | None) -> dict[str,
     }
 
 
-@router.get("/whoami")
-async def whoami(
-    request: Request, principal: Annotated[Principal, Depends(require_scope(Scope.READ))]
-) -> dict[str, object]:
-    return await _repo(request).identity(principal)
-
-
 @router.get("/collections")
 async def list_collections(
     request: Request,
@@ -130,6 +123,18 @@ async def create_collection(
         )
     except IntegrityError as exc:
         raise ProblemException(409, "conflict", "Conflict", "A collection with that name exists.") from exc
+
+
+@router.get("/collections/{collection_id}")
+async def get_collection(
+    collection_id: UUID,
+    request: Request,
+    principal: Annotated[Principal, Depends(require_scope(Scope.READ))],
+) -> dict[str, object]:
+    result = await _repo(request).get_collection(principal.tenant_id, collection_id)
+    if result is None:
+        raise ProblemException(404, "not_found", "Not found", "Collection was not found.")
+    return result
 
 
 @router.patch("/collections/{collection_id}")

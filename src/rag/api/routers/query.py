@@ -153,7 +153,7 @@ async def _persist_exchange(
         principal.key_id,
         body.conversation_id,
         body.question,
-        result.answer,
+        result.refusal["message"] if result.refusal is not None else result.answer,
         [asdict(citation) for citation in result.citations],
         result.request_id,
     ):

@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { apiKeyForEmail } from "@/lib/server/identity-directory";
+import { identityForEmail } from "@/lib/server/identity-directory";
 
 type RouteContext = { params: Promise<{ path: string[] }> };
 const forwardedHeaders = ["accept", "content-type", "idempotency-key", "if-match", "traceparent", "x-request-id"];
@@ -17,15 +17,20 @@ async function forward(request: Request, context: RouteContext): Promise<Respons
   const session = await auth();
   const email = session?.user?.email;
   if (!email) return Response.json({ code: "authentication_required" }, { status: 401 });
-  const apiKey = apiKeyForEmail(email);
-  if (!apiKey) return Response.json({ code: "authentication_required" }, { status: 401 });
   const { path } = await context.params;
   if (!path.length || path.some((part) => part === "." || part === "..")) return Response.json({ code: "not_found" }, { status: 404 });
+  const identity = identityForEmail(email);
+  if (!identity) return Response.json({ code: "authentication_required" }, { status: 401 });
+  const adminRoute = path[0] === "v1" && path[1] === "admin";
+  const editorWrite = method !== "GET" && path[0] === "v1" && ["collections", "documents", "jobs"].includes(path[1] ?? "");
+  if ((adminRoute && identity.role !== "admin") || (editorWrite && !["editor", "admin"].includes(identity.role))) {
+    return Response.json({ code: "permission_denied" }, { status: 403 });
+  }
   const base = process.env.RAG_API_URL;
   if (!base) return Response.json({ code: "dependency_unavailable" }, { status: 503 });
   const suffix = path.map(encodeURIComponent).join("/");
   const target = new URL(`${suffix}${new URL(request.url).search}`, base.endsWith("/") ? base : `${base}/`);
-  const headers = new Headers({ authorization: `Bearer ${apiKey}` });
+  const headers = new Headers({ authorization: `Bearer ${identity.api_key}` });
   for (const name of forwardedHeaders) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);

@@ -1,6 +1,6 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
-import { apiKeyForEmail } from "@/lib/server/identity-directory";
+import { identityForEmail } from "@/lib/server/identity-directory";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [Google],
@@ -11,7 +11,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signIn({ user, account, profile }) {
       if (account?.provider !== "google" || !user.email) return false;
       const googleProfile = profile as { email_verified?: boolean } | undefined;
-      return googleProfile?.email_verified === true && apiKeyForEmail(user.email) !== null;
+      return googleProfile?.email_verified === true && identityForEmail(user.email) !== null;
     },
     async session({ session }) {
       if (session.user) {

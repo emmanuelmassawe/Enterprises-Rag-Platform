@@ -216,7 +216,31 @@ class PostgresIngestionRepository:
             rows = list((await session.scalars(statement)).all())
         has_more = len(rows) > limit
         rows = rows[:limit]
-        return [_document(row) for row in rows], rows[-1].id if has_more and rows else None
+        output = [_document(row) for row in rows]
+        if rows:
+            async with self._database.tenant_session(tenant_id) as session:
+                jobs_result = await session.scalars(
+                    select(Job)
+                    .where(
+                        Job.tenant_id == tenant_id,
+                        Job.document_id.in_([row.id for row in rows]),
+                    )
+                    .order_by(Job.created_at.desc())
+                )
+                jobs = list(jobs_result.all())
+                latest: dict[UUID, Job] = {}
+                for job in jobs:
+                    if job.document_id is not None:
+                        latest.setdefault(job.document_id, job)
+            for item in output:
+                document_id = UUID(str(item["id"]))
+                job = latest.get(document_id)
+                item["job_id"] = job.id if job is not None else None
+                item["progress"] = job.progress if job is not None else 100
+                item["stage"] = job.stage if job is not None else item["status"]
+                item["retryable"] = job.retryable if job is not None else False
+                item["error_code"] = job.error_code if job is not None else None
+        return output, rows[-1].id if has_more and rows else None
 
     async def get_document(self, tenant_id: UUID, document_id: UUID) -> dict[str, object] | None:
         async with self._database.tenant_session(tenant_id) as session:

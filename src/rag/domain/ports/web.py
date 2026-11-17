@@ -6,7 +6,6 @@ from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
-from rag.domain.auth import Principal
 
 
 class WebRepository(Protocol):
@@ -19,6 +18,8 @@ class WebRepository(Protocol):
     async def create_collection(
         self, tenant_id: UUID, name: str, description: str | None
     ) -> dict[str, object]: ...
+
+    async def get_collection(self, tenant_id: UUID, collection_id: UUID) -> dict[str, object] | None: ...
 
     async def update_collection(
         self, tenant_id: UUID, collection_id: UUID, values: dict[str, object]
@@ -77,4 +78,3 @@ class WebRepository(Protocol):
 
     async def usage(self, tenant_id: UUID, since: datetime, until: datetime) -> dict[str, object]: ...
 
-    async def identity(self, principal: Principal) -> dict[str, object]: ...

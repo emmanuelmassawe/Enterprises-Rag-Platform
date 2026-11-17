@@ -10,7 +10,6 @@ from sqlalchemy import delete, func, select, update
 
 from rag.adapters.postgres.models import Collection, Conversation, Message, QueryLog
 from rag.db.session import Database
-from rag.domain.auth import Principal
 from rag.domain.ports.web import WebRepository
 
 
@@ -74,6 +73,17 @@ class PostgresWebRepository(WebRepository):
             session.add(row)
             await session.flush()
             return _collection(row)
+
+    async def get_collection(
+        self, tenant_id: UUID, collection_id: UUID
+    ) -> dict[str, object] | None:
+        async with self._database.tenant_session(tenant_id) as session:
+            row = await session.scalar(
+                select(Collection).where(
+                    Collection.tenant_id == tenant_id, Collection.id == collection_id
+                )
+            )
+            return _collection(row) if row is not None else None
 
     async def update_collection(
         self, tenant_id: UUID, collection_id: UUID, values: dict[str, object]
@@ -302,10 +312,3 @@ class PostgresWebRepository(WebRepository):
             "cost_note": "Provider price schedule is not configured.",
         }
 
-    async def identity(self, principal: Principal) -> dict[str, object]:
-        return {
-            "tenant_id": str(principal.tenant_id),
-            "key_id": str(principal.key_id),
-            "role": principal.role.value,
-            "scopes": sorted(scope.value for scope in principal.scopes),
-        }
