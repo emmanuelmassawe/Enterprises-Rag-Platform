@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import delete, func, select, update
@@ -258,7 +257,7 @@ class PostgresWebRepository(WebRepository):
             )
             if conversation.title == "New conversation":
                 conversation.title = question[:120].strip() or "New conversation"
-            conversation.updated_at = func.now()  # type: ignore[assignment]
+            conversation.updated_at = datetime.now(UTC)
             await session.flush()
             return True
 

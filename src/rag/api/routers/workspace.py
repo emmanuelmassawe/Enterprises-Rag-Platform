@@ -41,9 +41,9 @@ class CollectionPatch(BaseModel):
     @field_validator("name")
     @classmethod
     def trim_name(cls, value: str | None) -> str | None:
-        if value is not None and not value.strip():
+        if value is None or not value.strip():
             raise ValueError("name must not be blank")
-        return value.strip() if value else value
+        return value.strip()
 
 
 class ConversationInput(BaseModel):
@@ -68,9 +68,9 @@ class ConversationPatch(BaseModel):
     @field_validator("title")
     @classmethod
     def trim_title(cls, value: str | None) -> str | None:
-        if value is not None and not value.strip():
+        if value is None or not value.strip():
             raise ValueError("title must not be blank")
-        return value.strip() if value else value
+        return value.strip()
 
 
 class FeedbackInput(BaseModel):

@@ -5,7 +5,7 @@ export function proxy(request: NextRequest): NextResponse {
   const nonce = randomBytes(18).toString("base64");
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
-  const faro = process.env.NEXT_PUBLIC_FARO_COLLECTOR_URL;
+  const faro = process.env.FARO_COLLECTOR_URL;
   const collectorOrigin = faro ? new URL(faro).origin : "'self'";
   const production = process.env.NODE_ENV === "production";
   const directives = ["default-src 'self'", `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`, "style-src 'self'", "img-src 'self' data: blob:", "font-src 'self' data:", `connect-src 'self' ${collectorOrigin}`, "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'", ...(production ? ["upgrade-insecure-requests"] : [])].join("; ");

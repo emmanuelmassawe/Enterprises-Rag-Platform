@@ -14,7 +14,7 @@ import { apiFetch, idempotencyKey, type Citation, type Collection, type Conversa
 import { KnowledgePanel } from "./knowledge-panel";
 import { AdminPanel } from "./admin-panel";
 
-type Identity = { tenant_id: string; key_id: string; role: "viewer" | "editor" | "admin"; scopes: string[] };
+type Identity = { email: string; role: "viewer" | "editor" | "admin" };
 type View = "chat" | "knowledge" | "admin" | "settings";
 type StreamState = "idle" | "retrieving" | "streaming" | "complete" | "refused" | "error" | "cancelled";
 type LocalMessage = Message & { provisional?: boolean; state?: StreamState };
@@ -61,9 +61,20 @@ export function Workspace({ locale, email, displayName }: { locale: string; emai
   useEffect(() => {
     document.documentElement.lang = locale;
   }, [locale]);
+  const lastLoadedConversation = useRef<string | null>(null);
   useEffect(() => {
-    setLocalMessages(messages.data ?? []);
+    if (lastLoadedConversation.current !== activeConversation) {
+      lastLoadedConversation.current = activeConversation;
+      setLocalMessages(messages.data ?? []);
+    } else if (messages.data?.length) {
+      setLocalMessages(messages.data);
+    }
   }, [messages.data, activeConversation]);
+  useEffect(() => {
+    const refresh = () => void queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    window.addEventListener("sagefield:conversations-changed", refresh);
+    return () => window.removeEventListener("sagefield:conversations-changed", refresh);
+  }, [queryClient]);
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
       const target = event.target as HTMLElement;
