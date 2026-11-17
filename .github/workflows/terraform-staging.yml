@@ -13,6 +13,11 @@ on:
         required: true
         type: boolean
         default: false
+      deploy_web_service:
+        description: Enable the Next.js BFF after Google OAuth and per-user API key mappings are configured
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -59,6 +64,12 @@ jobs:
       TF_VAR_alloy_otlp_endpoints: ${{ vars.TERRAFORM_ALLOY_OTLP_ENDPOINTS_JSON || '{}' }}
       TF_VAR_api_metrics_targets: ${{ vars.TERRAFORM_API_METRICS_TARGETS_JSON || '{}' }}
       TF_VAR_deploy_application_services: ${{ inputs.deploy_application_services }}
+      TF_VAR_deploy_web_service: ${{ inputs.deploy_web_service }}
+      TF_VAR_web_origins: ${{ vars.TERRAFORM_WEB_ORIGINS_JSON || '{}' }}
+      TF_VAR_web_rag_api_urls: ${{ vars.TERRAFORM_WEB_RAG_API_URLS_JSON || '{}' }}
+      TF_VAR_web_faro_collector_urls: ${{ vars.TERRAFORM_WEB_FARO_URLS_JSON || '{}' }}
+      TF_VAR_web_secrets: ${{ secrets.TERRAFORM_WEB_SECRETS_JSON || '{}' }}
+      TF_VAR_release_version: ${{ github.sha }}
       TF_VAR_deploy_grafana_resources: ${{ inputs.deploy_grafana_resources }}
       TF_VAR_deploy_production: "false"
     steps:

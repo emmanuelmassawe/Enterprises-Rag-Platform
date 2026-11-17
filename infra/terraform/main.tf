@@ -117,6 +117,40 @@ resource "render_web_service" "api" {
   }
 }
 
+resource "render_web_service" "web" {
+  for_each = var.deploy_web_service ? local.application_environments : toset([])
+
+  name                       = "rag-web-${each.key}"
+  plan                       = var.service_plan
+  region                     = var.region
+  environment_id             = render_project.platform.environments[each.key].id
+  start_command              = "node server.js"
+  health_check_path          = "/api/healthz"
+  max_shutdown_delay_seconds = 30
+  num_instances              = 1
+  runtime_source = {
+    docker = {
+      repo_url        = var.repository_url
+      branch          = var.deploy_branch
+      dockerfile_path = "./web/Dockerfile"
+      context         = "./web"
+      auto_deploy     = false
+    }
+  }
+  env_vars = {
+    APP_ORIGIN                  = { value = var.web_origins[each.key] }
+    RAG_API_URL                 = { value = var.web_rag_api_urls[each.key] }
+    AUTH_URL                    = { value = var.web_origins[each.key] }
+    AUTH_TRUST_HOST             = { value = "true" }
+    AUTH_SECRET                 = { value = var.web_secrets[each.key]["AUTH_SECRET"] }
+    AUTH_GOOGLE_ID              = { value = var.web_secrets[each.key]["AUTH_GOOGLE_ID"] }
+    AUTH_GOOGLE_SECRET          = { value = var.web_secrets[each.key]["AUTH_GOOGLE_SECRET"] }
+    WEB_IDENTITY_DIRECTORY_JSON = { value = var.web_secrets[each.key]["WEB_IDENTITY_DIRECTORY_JSON"] }
+    FARO_COLLECTOR_URL          = { value = try(var.web_faro_collector_urls[each.key], "") }
+    RELEASE_VERSION             = { value = var.release_version }
+  }
+}
+
 resource "render_background_worker" "ingestion" {
   for_each = local.application_environments
 

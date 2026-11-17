@@ -169,7 +169,30 @@ flowchart TB
   Alloy --> Grafana[Grafana Cloud]
 ```
 
-Terraform is the infrastructure source of truth; see [ADR-017](ADR/ADR-017-m7-render-grafana-infrastructure.md). The provider schemas were checked against pinned versions and `terraform validate` passed. Resource creation awaits owner region, plan, account, secret and remote-state inputs. Paid Render Postgres supports backups/PITR according to current docs, with recovery window tied to workspace plan; RPO/RTO remain targets until tested. Paid Key Value persistence and policy are selected separately. No production apply outside owner-approved CI/CD. Postgres/Redis have no public allow-list entries. `rag-web` remains deferred to M8. Worker pull metrics and app OTLP logs are not connected to cloud telemetry yet.
+Terraform is the infrastructure source of truth; see [ADR-017](ADR/ADR-017-m7-render-grafana-infrastructure.md). The provider schemas were checked against pinned versions and `terraform validate` passed. Resource creation awaits owner region, plan, account, secret and remote-state inputs. Paid Render Postgres supports backups/PITR according to current docs, with recovery window tied to workspace plan; RPO/RTO remain targets until tested. Paid Key Value persistence and policy are selected separately. No production apply outside owner-approved CI/CD. Postgres/Redis have no public allow-list entries. The M8 Terraform change adds a separate `rag-web` service with a health check; no staging rollout has been performed. Worker pull metrics and app OTLP logs are not connected to cloud telemetry yet.
+
+## Web workspace and BFF (Milestone 8)
+
+The browser authenticates with an Auth.js session and calls only the same-origin Next.js BFF. An operator-managed server-side directory maps verified Google emails to a unique API key and role. The BFF injects that key when proxying to FastAPI; the web process receives no provider or blob-storage credentials. The web Render service intentionally has no link to the API environment group. See [ADR-018](ADR/ADR-018-milestone-8-web-workspace.md).
+
+```mermaid
+flowchart LR
+  Browser[Browser: HttpOnly session, no API secret] -->|Same-origin JSON and SSE| BFF[Next.js BFF /api/rag]
+  BFF -->|Verified identity + role gate| Directory[Protected identity directory]
+  BFF -->|Server-only tenant API key| API[FastAPI RAG API]
+  API --> RLS[(Postgres RLS)]
+  BFF -. runtime URL only, no message data .-> Faro[Grafana Faro]
+  Auth[Google OIDC] -->|verified email| BFF
+```
+
+| NFR | Decision/component | Trade-off and verification |
+|---|---|---|
+| NFR-SEC-001/002/003 | ADR-018 BFF-only API credentials, identity allowlist, Origin check, CSP nonce, safe Markdown; API authorization and RLS remain final controls. | Review browser requests and role denials; run browser XSS/CSRF tests before production. |
+| NFR-PRIV-001 | Faro captures browser errors/web vitals only; console capture disabled; no user identifiers or chat content attached. | Verify outbound browser telemetry payload and configured Faro retention. |
+| NFR-A11Y-001, UX-001 | Semantic labels, visible focus, 44px controls, responsive dialogs, polite status announcements, reduced-motion, EN/SW catalogs. | axe, keyboard/screen reader review and Lighthouse >=90 remain required. |
+| NFR-COMP-001 | App Router and progressive HTML with client components scoped to interactive workspace. | Playwright browser matrix remains required. |
+| NFR-MAINT-001 | Strict TypeScript, Zod boundaries, shared API client, semantic CSS tokens, CI lint/typecheck/build. | npm lock install and CI gates provide evidence; no live identity is required to compile. |
+| NFR-OPS-001 | Separate Render `rag-web` Docker service with independent health route and web-specific secrets. | Terraform fmt/validate and staging health probe remain required. |
 
 ## Milestone 3 ingestion path
 
@@ -209,9 +232,9 @@ See [ADR index](ADR/README.md). Main deliberate trade-offs: REST/SSE is simpler 
 | PERF-001/002, SCALE-001/002 | ADR-001 Postgres/pgvector + FTS; ADR-003 hybrid retrieval; ADR-004 worker/queue; ADR-006 Redis split; ADR-012 un-sized vector column; ADR-013 upload/page/chunk/batch/concurrency bounds | Load test and query plan tuning required; thresholds proposed; HNSW index awaits approved embedding dimension. |
 | AVAIL-001, REL-001, OPS-001 | ADR-002 REST/jobs; ADR-004 queue; ADR-010 Render health-gated deployment; ADR-013 stable job IDs, duplicate-safe persistence and bounded provider retries | Provider outages excluded from latency target; verify failover/rollback. |
 | DR-001, DATA-001 | ADR-001 Postgres source of truth; ADR-004 persisted state queue; ADR-005 private blob store; ADR-013 idempotent deletion and metadata redaction | Must run restore and cascade drill; production blob backup and retention open. |
-| SEC-001..003, AI-001/002 | ADR-007 RLS; ADR-008 no-tool guarded RAG; ADR-009 BFF; ADR-011 redacted telemetry; ADR-012 forced RLS, role split, hashed API keys; ADR-013 admin-scoped quarantine and audited decisions | Local RLS role smoke passed; CI repeats tenant visibility checks. Red-team tests remain required; no design alone proves zero leakage. |
+| SEC-001..003, AI-001/002 | ADR-007 RLS; ADR-008 no-tool guarded RAG; ADR-009/018 BFF; ADR-011 redacted telemetry; ADR-012 forced RLS, role split, hashed API keys; ADR-013 admin-scoped quarantine and audited decisions | Local RLS role smoke passed; CI repeats tenant visibility checks. Red-team and browser security tests remain required; no design alone proves zero leakage. |
 | PRIV-001 | ADR-011 telemetry minimization; ADR-005 data lifecycle; BFF identity separation | Retention/provider deletion terms need owner confirmation. |
-| A11Y-001, UX-001, COMP-001 | ADR-009 Next.js UI and EN/SW localization; WCAG target in NFR | Browser/assistive tech tests required. |
+| A11Y-001, UX-001, COMP-001 | ADR-009/018 Next.js UI, responsive accessible patterns and EN/SW localization | Browser/assistive tech tests required; target not claimed achieved. |
 | MAINT-001, TEST-001, PORT-001 | Hexagonal layering, ingestion ports/adapters, Postgres/Redis adapters, OpenAPI source of truth; ADR-012/013 | M3 static checks and 81% branch-aware unit coverage passed; live provider contract coverage and performance verification remain. |
 | OBS-001 | ADR-011/015 OTel request spans, bounded Prometheus metrics, worker outcome endpoint, optional content-free LangSmith exporter, Alloy/Grafana local profile | Middleware and exporter tests; full-stage/job trace correlation, cloud alert exercise and missing-telemetry alert remain staging gates. |
 | COST-001 | ADR-008 bounded model/context/token use; quotas, usage accounting, kill switch | Owner budgets absent; provider prices can change. |

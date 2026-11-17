@@ -1,6 +1,6 @@
 # Requirements traceability
 
-Status: M2-M5 have implementation evidence. M5 wires OTel request spans, metadata-only opt-in LangSmith runs, local Grafana/Prometheus metrics and AI security smoke cases. Nested LangSmith stages/feedback, cloud alert exercises and production privacy gates remain open. CI must keep all FR references and tests synchronized.
+Status: Backend milestones M2-M6 and web implementation M8 have code mappings. M8 frontend lint/type/build and browser evidence are tracked below; Playwright, axe, Lighthouse, authenticated screenshots and staging deployment remain release gates. CI must keep all FR references and tests synchronized.
 
 ## Functional requirements
 
@@ -56,6 +56,19 @@ Status: M2-M5 have implementation evidence. M5 wires OTel request spans, metadat
 | NFR-COST-001 | ADR-008, 006 | provider reconciliation, spend-cap/kill-switch exercise | cost/query, spend/tenant, budget alert |
 | NFR-OPS-001 | ADR-004, 010, 012, 013, 014 | async lifecycle cleanup, bounded work, provider timeouts/circuit breakers, readiness and migration/runtime role separation; later SIGTERM/deploy checks | local migration and role smoke, unit tests; staging deploy/rollback not yet run | request metrics and readiness live; deployment health/rollback metrics planned |
 | NFR-DATA-001 | ADR-001, 004, 005, 006, 011, 013 | partial-write/crash tests and deletion/restore drills | deletion completion, recovery objectives |
+
+## Milestone 8 web traceability
+
+| Requirement | Component | Endpoint/resource | Verification | Monitoring / SLO |
+|---|---|---|---|---|
+| FR-AUTH-002 | `web/src/auth.ts`, server identity directory, BFF | Auth.js Google OIDC; `/api/auth/context`; `/api/rag/*` | CI lint/typecheck/build; login allowlist and session E2E pending configured Google test identity | Faro browser errors and web vitals; no identity labels |
+| FR-CNV-001/002 | `workspace.tsx`, `PostgresWebRepository`, workspace router | `/v1/conversations*`, `/v1/conversations/{id}/messages` | API ownership and pagination tests; authenticated chat E2E pending | API route metrics; no message data in telemetry |
+| FR-UI-001 | Safe Markdown chat, SSE reader, citation detail, feedback controls | `/v1/query`, `/v1/feedback`, conversation routes | Typecheck/build; SSE browser/citation/refusal/XSS E2E pending | Faro route timing and web vitals; API query SLO |
+| FR-KB-001 / FR-UI-003 | Knowledge panel and upload progress | `/v1/collections*`, `/v1/documents*`, `/v1/jobs/{id}` | Typecheck/build; upload/status/retry/delete browser flow pending | Upload and job completion metrics |
+| FR-ADM-001/002 / FR-UI-004 | Admin panel, BFF admin role gate | `/v1/admin/quarantine*`, `/v1/admin/usage`, `/v1/admin/status`, `/v1/admin/api-keys*` | Role gate and plain-text behavior; admin browser/XSS review pending | API auth denials, usage/status endpoint metrics |
+| FR-UI-002 / NFR-A11Y-001 / NFR-UX-001 | next-intl EN/SW, next-themes, semantic tokens, responsive layout | `/{locale}`, settings controls | `npm run lint`, `npm run typecheck`, `npm run build`; axe/Lighthouse/keyboard evidence pending | Lighthouse accessibility/performance budgets >=90; browser error rate |
+| NFR-SEC-001..003 / NFR-PRIV-001 | Same-origin BFF, Origin validation, role gates, CSP nonce, safe renderer, Faro minimization | `/api/rag/*`, `web/src/proxy.ts` | Static review; adversarial browser requests and telemetry payload audit pending | CSP reports are not collected; Faro excludes chat content |
+| NFR-COMP-001 / NFR-OPS-001 | Next.js standalone image, Render `rag-web` Terraform resource | `/api/healthz` | Docker build, Terraform validate and staging health probe pending | Render service health and web availability |
 
 ## Milestone 7 infrastructure traceability
 

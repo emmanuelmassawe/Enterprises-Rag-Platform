@@ -15,11 +15,12 @@ Initialize with a local untracked backend configuration file, then run `terrafor
 
 `make tf-plan` is the local plan entry point once HCP Terraform state and protected inputs are available. `make tf-apply` intentionally refuses. Pull-request CI runs formatting and validation without provider credentials. Apply is performed by the protected CI workflow, only for staging in M7. Production resources are disabled by default (`deploy_production = false`) and production applies are outside this milestone and forbidden from local shells.
 
-The protected manual workflow supports a three-stage setup so generated Render hostnames and dependent credentials do not block the initial resources:
+The protected manual workflow supports staged setup so generated Render hostnames and dependent credentials do not block the initial resources:
 
 1. Leave `deploy_application_services` and `deploy_grafana_resources` false. Choose the region and paid Postgres/Redis plans. This creates the isolated Render project, staging Postgres, and two Redis instances.
 2. Create the least-privilege `rag_runtime` Postgres role, provision an S3-compatible bucket, select a service plan, and configure staging app secrets. Re-run with `deploy_application_services` true. This deploys the API and worker.
 3. After Render exposes the API and Alloy private hostnames, configure the protected Grafana stack values, `api_metrics_targets`, and `alloy_otlp_endpoints`. Re-run with `deploy_grafana_resources` true. This provisions Grafana resources and Alloy telemetry collection when both target maps include staging.
+4. After Google OAuth, the public web origin, an API URL reachable from the web service, and the protected identity directory are configured, re-run with both `deploy_application_services` and `deploy_web_service` true. Set the `TERRAFORM_WEB_ORIGINS_JSON`, `TERRAFORM_WEB_RAG_API_URLS_JSON`, optional `TERRAFORM_WEB_FARO_URLS_JSON`, and protected `TERRAFORM_WEB_SECRETS_JSON` environment values. The web service receives only its own Auth.js/OIDC/identity/Faro configuration, not the API and worker environment group.
 
 Each dispatch produces and applies a saved plan only on `main` inside the protected `staging` environment. Review the inputs and protected environment configuration before dispatch; workflow logs withhold provider plan/apply output because this repository is public.
 
@@ -41,7 +42,7 @@ Grafana dashboard JSON is sourced from `observability/dashboards/rag-platform.js
 
 ## Migration and deployment notes
 
-The API uses `/readyz` for Render deployment health checks and runs `alembic upgrade head` as its pre-deploy command. The Dockerfile is the already-reviewed application image source. The runtime-role bootstrap is a staging prerequisite: create `rag_runtime` with least privilege before providing its URL to Terraform. `pgvector` is enabled by the existing Alembic migration. `rag-web` is deliberately deferred to Milestone 8 because the Next.js BFF does not exist yet.
+The API uses `/readyz` for Render deployment health checks and runs `alembic upgrade head` as its pre-deploy command. The API Dockerfile is the application image source; `web/Dockerfile` builds the separate Next.js standalone BFF from `./web` and serves `/api/healthz`. The runtime-role bootstrap is a staging prerequisite: create `rag_runtime` with least privilege before providing its URL to Terraform. `pgvector` is enabled by the existing Alembic migration. The web Render service is opt-in and has not been deployed.
 
 ## Official documentation checked
 

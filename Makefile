@@ -1,4 +1,4 @@
-.PHONY: setup dev test lint typecheck smoke security-audit migrate bootstrap eval redteam load-test tf-plan tf-apply
+.PHONY: setup dev test lint typecheck web-setup web-lint web-typecheck web-build smoke security-audit migrate bootstrap eval redteam load-test tf-plan tf-apply
 
 setup:
 	uv sync --all-groups
@@ -19,6 +19,18 @@ lint:
 typecheck:
 	uv run mypy src
 	uv run lint-imports
+
+web-setup:
+	cd web && npm ci --ignore-scripts
+
+web-lint:
+	cd web && npm run lint
+
+web-typecheck:
+	cd web && npm run typecheck
+
+web-build:
+	cd web && npm run build
 
 smoke:
 	uv run python scripts/smoke.py

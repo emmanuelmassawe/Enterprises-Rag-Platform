@@ -256,6 +256,70 @@ variable "deploy_application_services" {
   }
 }
 
+variable "deploy_web_service" {
+  description = "Create the separate Next.js BFF service after staging API, Google OAuth and identity mappings are configured."
+  type        = bool
+  default     = false
+  validation {
+    condition     = !var.deploy_web_service || var.deploy_application_services
+    error_message = "deploy_application_services must be true before enabling the web BFF."
+  }
+}
+
+variable "web_origins" {
+  description = "Environment-scoped public HTTPS origin for the web UI, for example the Render web hostname."
+  type        = map(string)
+  default     = {}
+  validation {
+    condition = !var.deploy_web_service || alltrue([
+      for environment in (var.deploy_production ? ["staging", "production"] : ["staging"]) :
+      contains(keys(var.web_origins), environment) && can(regex("^https://", try(var.web_origins[environment], "")))
+    ])
+    error_message = "An HTTPS origin is required for each enabled web environment."
+  }
+}
+
+variable "web_rag_api_urls" {
+  description = "Environment-scoped RAG API base URL reachable from the web service; use the same-region private URL where available."
+  type        = map(string)
+  default     = {}
+  validation {
+    condition = !var.deploy_web_service || alltrue([
+      for environment in (var.deploy_production ? ["staging", "production"] : ["staging"]) :
+      contains(keys(var.web_rag_api_urls), environment) && can(regex("^https?://", try(var.web_rag_api_urls[environment], "")))
+    ])
+    error_message = "A reachable RAG API URL is required for each enabled web environment."
+  }
+}
+
+variable "web_faro_collector_urls" {
+  description = "Optional environment-scoped Faro collector URL; leave empty until the owner Grafana Cloud receiver is configured."
+  type        = map(string)
+  default     = {}
+}
+
+variable "web_secrets" {
+  description = "Environment-scoped web BFF secrets: AUTH_SECRET, AUTH_GOOGLE_ID, AUTH_GOOGLE_SECRET and WEB_IDENTITY_DIRECTORY_JSON."
+  type        = map(map(string))
+  sensitive   = true
+  default     = {}
+  validation {
+    condition = !var.deploy_web_service || alltrue(flatten([
+      for environment in (var.deploy_production ? ["staging", "production"] : ["staging"]) : [
+        for key in ["AUTH_SECRET", "AUTH_GOOGLE_ID", "AUTH_GOOGLE_SECRET", "WEB_IDENTITY_DIRECTORY_JSON"] :
+        contains(try(keys(var.web_secrets[environment]), []), key) && length(trimspace(try(var.web_secrets[environment][key], ""))) > 0
+      ]
+    ]))
+    error_message = "Auth.js secret, Google OAuth credentials, and identity directory are required for each enabled web environment."
+  }
+}
+
+variable "release_version" {
+  description = "Non-secret release identifier injected into runtime telemetry."
+  type        = string
+  default     = "unknown"
+}
+
 variable "deploy_grafana_resources" {
   description = "Enable Grafana Cloud datasources, dashboard, alert rules, contact point and notification policy once the owner stack credentials are ready."
   type        = bool

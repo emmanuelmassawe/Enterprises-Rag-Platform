@@ -19,7 +19,7 @@ Milestone 7 provisions the API, ingestion worker, Postgres, separate durable/con
 - Provision the Prometheus query datasource, existing operations dashboard JSON, a folder, three alert rules derived from `observability/alerts.yml`, an owner-addressed contact point, and a root notification policy. Alert delivery and query semantics still require a smoke exercise against the owner's Grafana Cloud stack.
 - Use an HCP Terraform remote backend with locking, configured outside git. Terraform state and saved plans can contain connection credentials and are treated as secrets. PR workflows run static checks without provider secrets; applies run only in protected CI environments.
 - Split staging provisioning into three explicit protected workflow stages: Render database/cache foundation; API/worker after the runtime role, bucket and app secrets exist; Grafana resources and Alloy after account credentials and Render private hostnames are known. Both service/Grafana toggles default off, avoiding a dependency cycle on generated endpoints.
-- Defer `rag-web` to M8 because the Next.js BFF does not yet exist. Keep bucket creation outside this change because provider/account, retention, encryption and budget are undecided.
+- M7 deferred `rag-web` until the Next.js BFF existed. M8 adds it as a separately configured opt-in service; see [ADR-018](ADR-018-milestone-8-web-workspace.md). Keep bucket creation outside this change because provider/account, retention, encryption and budget are undecided.
 
 ## NFR mapping
 

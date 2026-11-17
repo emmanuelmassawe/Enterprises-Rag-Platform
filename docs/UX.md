@@ -1,6 +1,6 @@
 # UX outline
 
-Status: Phase 0 outline; detailed interaction design and implementation belong to Milestone 8. All flows map to [requirements](REQUIREMENTS.md); security and access remain enforced by the API, not the UI alone.
+Status: Milestone 8 implementation design. The screens and flows below describe the current `web/` application; test, accessibility and staging evidence is tracked in [production readiness](PRODUCTION_READINESS.md). Requirements map to [REQUIREMENTS.md](REQUIREMENTS.md), and API authorization remains authoritative.
 
 ## Personas
 
@@ -78,9 +78,50 @@ Knowledge: [collection selector] [search/filter + document table] [upload panel/
 Admin: [review queue] [plain-text detail + decision] [usage/status tabs]
 ```
 
-## Design tokens to define in Milestone 8
+## Design tokens
 
-Use semantic tokens rather than component-specific values: background/surface/raised surface, foreground/muted text, primary/accent, success/warning/error/info, border/focus ring; body and display type scale; 4/8-based spacing; restrained radii and elevation; motion duration/easing plus reduced-motion override. Exact values and final typography remain pending visual exploration and owner review.
+The CSS custom properties live in `web/src/app/globals.css`; Tailwind utilities use semantic `@theme inline` aliases. Colors are restrained forest green, warm gold and neutral surfaces. Dark mode changes the same semantic variables rather than maintaining a second component palette.
+
+| Token group | Current values / rule |
+|---|---|
+| Canvas and surfaces | Light `#f5f7f4`, `#ffffff`, `#eef3ef`; dark `#111a16`, `#18231d`, `#202e26`. |
+| Text and borders | Semantic `--ink`, `--muted`, `--line`; pair status icon and label with color. |
+| Brand and focus | Forest `#236b53` / dark `#70c29e`; gold focus `#bd8a36` / dark `#e0bd7d`, 3px visible outline. |
+| Type | System UI stack (`Aptos`, `Segoe UI`, system sans); no remote font request. |
+| Spacing and targets | 4px base rhythm; interactive controls have minimum 44px height/width. |
+| Shape and elevation | Cards use 20px radius and soft shadow; controls use 13–16px radius. |
+| Motion | 160ms interaction transitions; `prefers-reduced-motion` reduces transitions and animation. |
+
+## Implemented interaction details
+
+| Flow | Screen behavior | API / state |
+|---|---|---|
+| Login | Google sign-in; unapproved or unverified identities are denied. | Auth.js OIDC callback; server-side identity directory. |
+| Chat | New/history/pinned/search, collection scope, streaming, cancel, copy, feedback, retry, refusal and error states. | Conversation CRUD, `/v1/query` SSE, `/v1/feedback`; TanStack Query caches non-secret server state in memory. |
+| Sources | Citation opens a keyboard-operable detail dialog with quoted chunk text and provenance. | Citation data returned with query. Original document open/download is not available in the current API contract. |
+| Knowledge | Create/rename/delete collections; bounded multi-PDF upload with per-file progress; search/status; retry failed jobs; confirm destructive actions. | Collections, documents and jobs routes via the BFF. |
+| Admin | Role-gated quarantine review, API key create/revoke, usage estimate and dependency status. Quarantine is plain text. | Admin endpoints; API authorization repeats the BFF role check. |
+| Settings | Theme, language and sign out; retention notice. | Locale route, `next-themes`, Auth.js sign-out. |
+
+The conversation editor presents a revised message as a new user turn, preserving prior history. The current implementation does not offer a source-file URL, retrieval-only mode controls, data-retention edits, or share links. These require API or owner policy decisions and are not presented as working controls.
+
+## Responsive wireframe
+
+```text
+Desktop (>= 1024px)
++----------------+-----------------------------------+--------------------+
+| Nav / history  | Conversation + sticky composer   | Citation details   |
+| Search / pins  | Streaming answer and feedback    | Passage / location |
++----------------+-----------------------------------+--------------------+
+
+Mobile (< 768px)
++-----------------------------------+
+| Top bar / navigation drawer       |
+| Conversation and status           |
+| Sticky composer                   |
+| Citation detail dialog / sheet    |
++-----------------------------------+
+```
 
 ## Verification planned
 

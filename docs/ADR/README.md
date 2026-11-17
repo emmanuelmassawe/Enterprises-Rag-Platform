@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-Status: ADR-001 through ADR-011 were approved with Phase 0. ADR-012 records Milestone 2, ADR-013 Milestone 3, ADR-014 Milestone 4, ADR-015 the Milestone 5 implementation, ADR-016 the Milestone 6 evaluation approach, and ADR-017 the Milestone 7 infrastructure configuration and deployment gates.
+Status: ADR-001 through ADR-011 were approved with Phase 0. ADR-012 records Milestone 2, ADR-013 Milestone 3, ADR-014 Milestone 4, ADR-015 the Milestone 5 implementation, ADR-016 the Milestone 6 evaluation approach, ADR-017 the Milestone 7 infrastructure configuration and deployment gates, and ADR-018 the Milestone 8 web BFF implementation (approval pending).
 
 | ADR | Decision |
 |---|---|
@@ -21,4 +21,5 @@ Status: ADR-001 through ADR-011 were approved with Phase 0. ADR-012 records Mile
 | [ADR-015](ADR-015-milestone-5-observability-security.md) | OpenTelemetry, metadata-only LangSmith runs, Grafana local metrics, worker failure accounting and AI security controls. |
 | [ADR-016](ADR-016-milestone-6-evaluation-harness.md) | Versioned synthetic evaluation harness, metrics, LLM judge and owner-approved threshold gates. |
 | [ADR-017](ADR-017-m7-render-grafana-infrastructure.md) | Pinned Render/Grafana Terraform, staging resources, state security and telemetry gaps. |
+| [ADR-018](ADR-018-milestone-8-web-workspace.md) | Next.js workspace, Google OIDC, server-side identity mapping, safe rendering and isolated web service. |
 

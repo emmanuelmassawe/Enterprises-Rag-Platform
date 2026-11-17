@@ -39,7 +39,13 @@ async function forward(request: Request, context: RouteContext): Promise<Respons
     method,
     headers,
     cache: "no-store",
-    signal: AbortSignal.timeout(method === "POST" && path.at(-1) === "query" ? 70_000 : 15_000),
+    signal: AbortSignal.timeout(
+      method === "POST" && path.at(-1) === "query"
+        ? 70_000
+        : method === "POST" && path[1] === "documents"
+          ? 120_000
+          : 15_000,
+    ),
   };
   if (method !== "GET" && method !== "DELETE" && request.body) {
     init.body = request.body;

@@ -1,6 +1,6 @@
 # Enterprise RAG Platform
 
-Foundation for a multi-tenant document question-answering service. The current implementation provides the FastAPI process, PostgreSQL schema with tenant RLS, hashed API-key authentication, Redis-backed rate limiting and ingestion jobs, protected metrics, health routes, private PDF ingestion, page-aware chunking, Gemini embeddings, quarantine review, and a local API/worker container workflow. Milestone 4 adds tenant-scoped hybrid retrieval, guarded Gemini answers, citation validation, SSE and a versioned answer cache. Milestone 5 adds OTel request spans, metadata-only opt-in LangSmith runs, worker/job/query metrics, local Grafana/Prometheus observability, configurable PII input handling, output canary/secret scanning, and synthetic red-team smoke cases. Milestone 7 adds Render/Grafana Terraform configuration; no paid resources have been created because owner account, region, plans, budget, remote state, and provider values are not configured. The web UI remains a later milestone.
+Foundation for a multi-tenant document question-answering service. The current implementation provides FastAPI, PostgreSQL tenant RLS, hashed API-key authentication, Redis-backed rate limiting and ingestion jobs, protected metrics, private PDF ingestion, hybrid retrieval, guarded answers with citations, SSE, evaluations, security controls, and Render/Grafana Terraform. Milestone 8 adds the Next.js workspace with Google OIDC, a server-side BFF, streaming chat, knowledge management, and role-gated admin screens. No paid resources have been created because owner account, region, plans, budget, remote state, and provider values are not configured.
 
 ## Contents
 
@@ -16,6 +16,22 @@ Foundation for a multi-tenant document question-answering service. The current i
 ## Requirements and API
 
 The approved Phase 0 design proposes p95 non-LLM API latency ≤300 ms, p95 answer first-token latency ≤3 s, monthly API availability ≥99.5%, and 80% test coverage. Quantitative service goals remain owner-confirmation proposals. The versioned API source is [api/openapi.yaml](api/openapi.yaml); health routes are `/healthz` and `/readyz`. See the [API design](docs/API_DESIGN.md) for authentication, SSE and error conventions.
+
+## Web workspace
+
+The `web/` application is a Next.js App Router workspace in English and Swahili. It includes Google sign-in, streaming chat with citations, conversation history, collection and PDF management, and role-gated administration. The browser calls the same-origin Next.js BFF; only the BFF reads the server-side identity mapping and attaches an API key.
+
+```mermaid
+flowchart LR
+  Browser[Browser session] --> Next[Next.js web BFF]
+  Google[Google OIDC] --> Next
+  Next -->|server-only API key| API[FastAPI]
+  API --> DB[(Postgres RLS)]
+```
+
+Local startup: copy `web/.env.example` to `web/.env.local`, set an Auth.js secret, Google OAuth credentials, and a local identity mapping that points to an API key with the correct tenant role; then run `npm ci --ignore-scripts` and `npm run dev` from `web/`. Keep that identity mapping and API key in ignored local secrets. The web container is also included in `docker compose up --build`; open `http://127.0.0.1:3001`.
+
+The `rag-web` Render service is opt-in in the staging Terraform workflow. It requires web origin/API URL variables plus protected `TERRAFORM_WEB_SECRETS_JSON` with `AUTH_SECRET`, Google OAuth values, and the approved email-to-API-key identity map. The web service does not receive API provider/storage environment-group secrets. See [ADR-018](docs/ADR/ADR-018-milestone-8-web-workspace.md) and the [UX specification](docs/UX.md). UI screenshots are a release artifact after a non-production Google test identity and staging URL are configured; do not add customer data or bypass authentication to create them.
 
 ## Architecture
 
