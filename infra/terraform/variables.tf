@@ -272,7 +272,7 @@ variable "web_origins" {
   default     = {}
   validation {
     condition = !var.deploy_web_service || alltrue([
-      for environment in (var.deploy_production ? ["staging", "production"] : ["staging"]) :
+      for environment in(var.deploy_production ? ["staging", "production"] : ["staging"]) :
       contains(keys(var.web_origins), environment) && can(regex("^https://", try(var.web_origins[environment], "")))
     ])
     error_message = "An HTTPS origin is required for each enabled web environment."
@@ -285,7 +285,7 @@ variable "web_rag_api_urls" {
   default     = {}
   validation {
     condition = !var.deploy_web_service || alltrue([
-      for environment in (var.deploy_production ? ["staging", "production"] : ["staging"]) :
+      for environment in(var.deploy_production ? ["staging", "production"] : ["staging"]) :
       contains(keys(var.web_rag_api_urls), environment) && can(regex("^https?://", try(var.web_rag_api_urls[environment], "")))
     ])
     error_message = "A reachable RAG API URL is required for each enabled web environment."
@@ -305,7 +305,7 @@ variable "web_secrets" {
   default     = {}
   validation {
     condition = !var.deploy_web_service || alltrue(flatten([
-      for environment in (var.deploy_production ? ["staging", "production"] : ["staging"]) : [
+      for environment in(var.deploy_production ? ["staging", "production"] : ["staging"]) : [
         for key in ["AUTH_SECRET", "AUTH_GOOGLE_ID", "AUTH_GOOGLE_SECRET", "WEB_IDENTITY_DIRECTORY_JSON"] :
         contains(try(keys(var.web_secrets[environment]), []), key) && length(trimspace(try(var.web_secrets[environment][key], ""))) > 0
       ]

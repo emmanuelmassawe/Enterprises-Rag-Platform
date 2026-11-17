@@ -125,9 +125,7 @@ async def _run_query(
         ) from exc
 
 
-async def _validate_conversation(
-    request: Request, body: QueryInput, principal: Principal
-) -> None:
+async def _validate_conversation(request: Request, body: QueryInput, principal: Principal) -> None:
     if body.conversation_id is None:
         return
     repository = getattr(request.app.state, "web_repository", None)

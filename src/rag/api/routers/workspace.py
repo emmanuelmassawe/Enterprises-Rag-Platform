@@ -93,7 +93,10 @@ def _repo(request: Request) -> WebRepository:
 def _page(items: list[dict[str, object]], next_cursor: UUID | None) -> dict[str, object]:
     return {
         "items": items,
-        "page": {"next_cursor": str(next_cursor) if next_cursor else None, "has_more": next_cursor is not None},
+        "page": {
+            "next_cursor": str(next_cursor) if next_cursor else None,
+            "has_more": next_cursor is not None,
+        },
     }
 
 
@@ -122,7 +125,9 @@ async def create_collection(
             principal.tenant_id, body.name, body.description
         )
     except IntegrityError as exc:
-        raise ProblemException(409, "conflict", "Conflict", "A collection with that name exists.") from exc
+        raise ProblemException(
+            409, "conflict", "Conflict", "A collection with that name exists."
+        ) from exc
 
 
 @router.get("/collections/{collection_id}")
@@ -149,7 +154,9 @@ async def update_collection(
             principal.tenant_id, collection_id, body.model_dump(exclude_unset=True)
         )
     except IntegrityError as exc:
-        raise ProblemException(409, "conflict", "Conflict", "A collection with that name exists.") from exc
+        raise ProblemException(
+            409, "conflict", "Conflict", "A collection with that name exists."
+        ) from exc
     if result is None:
         raise ProblemException(404, "not_found", "Not found", "Collection was not found.")
     return result
@@ -257,10 +264,15 @@ async def submit_feedback(
     body: FeedbackInput,
     request: Request,
     principal: Annotated[Principal, Depends(require_scope(Scope.READ))],
-    _idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=32, max_length=128)],
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=32, max_length=128)],
 ) -> dict[str, object]:
     if not idempotency_key.isascii() or not idempotency_key.isprintable():
-        raise ProblemException(422, "validation_failed", "Validation failed", "Idempotency-Key must be printable ASCII.")
+        raise ProblemException(
+            422,
+            "validation_failed",
+            "Validation failed",
+            "Idempotency-Key must be printable ASCII.",
+        )
     status = await _repo(request).feedback(
         principal.tenant_id, principal.key_id, body.request_id, body.rating, body.reason
     )
@@ -281,10 +293,19 @@ async def get_usage(
     now = datetime.now(UTC)
     end = until or now
     start = since or end - timedelta(days=30)
-    if start.tzinfo is None or end.tzinfo is None or start >= end or end > now + timedelta(minutes=1):
-        raise ProblemException(422, "validation_failed", "Validation failed", "Use a valid UTC date range.")
+    if (
+        start.tzinfo is None
+        or end.tzinfo is None
+        or start >= end
+        or end > now + timedelta(minutes=1)
+    ):
+        raise ProblemException(
+            422, "validation_failed", "Validation failed", "Use a valid UTC date range."
+        )
     if end - start > timedelta(days=366):
-        raise ProblemException(422, "validation_failed", "Validation failed", "The range cannot exceed one year.")
+        raise ProblemException(
+            422, "validation_failed", "Validation failed", "The range cannot exceed one year."
+        )
     return await _repo(request).usage(principal.tenant_id, start, end)
 
 
@@ -305,4 +326,7 @@ async def admin_status(
             checks[name] = "ok" if await probe.ping() else "unavailable"
         except Exception:
             checks[name] = "unavailable"
-    return {"status": "ready" if all(value == "ok" for value in checks.values()) else "degraded", "checks": checks}
+    return {
+        "status": "ready" if all(value == "ok" for value in checks.values()) else "degraded",
+        "checks": checks,
+    }

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select
 
 from rag.adapters.postgres.models import Collection, Conversation, Message, QueryLog
 from rag.db.session import Database
@@ -103,11 +103,11 @@ class PostgresWebRepository(WebRepository):
     async def delete_collection(self, tenant_id: UUID, collection_id: UUID) -> bool:
         async with self._database.tenant_session(tenant_id) as session:
             result = await session.execute(
-                delete(Collection).where(
-                    Collection.tenant_id == tenant_id, Collection.id == collection_id
-                )
+                delete(Collection)
+                .where(Collection.tenant_id == tenant_id, Collection.id == collection_id)
+                .returning(Collection.id)
             )
-            return result.rowcount > 0
+            return result.scalar_one_or_none() is not None
 
     async def create_conversation(
         self, tenant_id: UUID, key_id: UUID, title: str
@@ -180,13 +180,15 @@ class PostgresWebRepository(WebRepository):
     ) -> bool:
         async with self._database.tenant_session(tenant_id, key_id) as session:
             result = await session.execute(
-                delete(Conversation).where(
+                delete(Conversation)
+                .where(
                     Conversation.tenant_id == tenant_id,
                     Conversation.owner_key_id == key_id,
                     Conversation.id == conversation_id,
                 )
+                .returning(Conversation.id)
             )
-            return result.rowcount > 0
+            return result.scalar_one_or_none() is not None
 
     async def list_messages(
         self, tenant_id: UUID, key_id: UUID, conversation_id: UUID, cursor: UUID | None, limit: int
@@ -280,7 +282,11 @@ class PostgresWebRepository(WebRepository):
             if row is None:
                 return "not_found"
             if row.feedback is not None:
-                return "same" if (row.feedback, row.feedback_reason) == (rating, reason) else "conflict"
+                return (
+                    "same"
+                    if (row.feedback, row.feedback_reason) == (rating, reason)
+                    else "conflict"
+                )
             row.feedback = rating
             row.feedback_reason = reason
             await session.flush()
@@ -304,10 +310,9 @@ class PostgresWebRepository(WebRepository):
         return {
             "since": since.isoformat(),
             "until": until.isoformat(),
-            "query_count": int(row[0]),
-            "input_tokens": int(row[1]),
-            "output_tokens": int(row[2]),
+            "query_count": int(row[0] or 0),
+            "input_tokens": int(row[1] or 0),
+            "output_tokens": int(row[2] or 0),
             "estimated_cost_usd": None,
             "cost_note": "Provider price schedule is not configured.",
         }
-

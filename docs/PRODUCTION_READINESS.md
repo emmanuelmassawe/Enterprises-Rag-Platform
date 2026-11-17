@@ -75,6 +75,20 @@ M5 implementation is committed in `1798f2d`, `c070409`, and `de0abcc`; this evid
 
 M6's synthetic dataset and provider setup assumptions are documented in [the evaluation guide](EVALUATION.md) and [ADR-016](ADR/ADR-016-milestone-6-evaluation-harness.md). The end-to-end evaluation remains an owner/operator setup gate; unset thresholds do not assert quality.
 
+## Milestone 8 evidence (2026-11-17)
+
+| Area | Evidence | Result |
+|---|---|---|
+| Web implementation | Next.js App Router, Google OIDC BFF, server-side identity map, chat/SSE, citations, collection/document/admin screens, EN/SW catalogs, responsive theme tokens, Faro | Implemented in `web/`; no production or staging identity/data used. |
+| Security-sensitive dependencies | `npm audit --json` using current npm registry advisories | Initial pinned versions reported six advisories. Upgraded Next.js, Auth.js, next-intl, PostCSS and Zod; regenerated lockfile. Subsequent locked install/audit is pending because registry download timed out. |
+| Python static gates | `uv run ruff check src`; `uv run ruff format --check src`; `uv run mypy src`; `uv run lint-imports` | Ruff lint passed; strict mypy passed on 70 source files; both architecture contracts kept. Ruff format found pre-existing changed-file formatting and it was corrected; final full format check pending. |
+| Terraform | Terraform 1.17.2 `fmt -recursive`; `init -backend=false`; `validate` with Render 1.9.1/Grafana 4.45.2, full repository mounted | Passed. An initial validate with only `infra/terraform` mounted correctly exposed that existing dashboard/Alloy `file()` references require the full repository; rerun with the full repo passed. No plan/apply was run. |
+| Frontend quality | `npm ci`, `npm audit`, ESLint, strict TypeScript and production build | Not complete: npm registry tarball request timed out on `zod-validation-error`; retry with persistent cache and extended retries is still running. |
+| Browser and accessibility | Playwright, axe, Lighthouse, visual screenshots | Not run. No approved non-production Google identity or staging URL is configured; do not bypass sign-in or use customer data to fabricate screenshots. |
+| API integration / deployment | Terraform plan/apply, live Google OIDC, Faro collector and RAG API | Not run; deployment secrets, identity map, selected origin and provider accounts are owner-managed inputs. |
+
+Milestone 8 is implementation-complete but not production-ready. Do not infer WCAG conformance, Lighthouse budgets, deployed availability or end-to-end login from the code alone.
+
 ## Remaining release gates
 
 - Confirm proposed `gemini-embedding-2` and 768 dimensions, account region, retention and spend limits; add a dimension-specific vector index in a new approved migration and benchmark it with tenant filters.
@@ -82,4 +96,4 @@ M6's synthetic dataset and provider setup assumptions are documented in [the eva
 - Run the full CI workflow, dependency-failure fault injection, and a populated-schema migration/restore drill before claiming the production standard. Local `pip-audit --skip-editable` completed with no known vulnerabilities.
 - Define a scheduled cleanup for expired idempotency records if issuance volume makes the bounded on-issuance cleanup insufficient.
 - Configure production runtime/migration roles and database TLS/private URLs; the local trust-authenticated Compose network is development-only.
-- Complete retrieval, AI safety, observability, evaluations, Terraform, web UI, and go/no-go review. Image-only PDF OCR remains unsupported; collection management and BFF session authorization are future milestones.
+- Complete production readiness and owner go/no-go review. Image-only PDF OCR remains unsupported. Collection management and BFF session authorization are implemented, but their browser and staging evidence remains open.

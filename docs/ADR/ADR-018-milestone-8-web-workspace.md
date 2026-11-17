@@ -28,6 +28,7 @@ Milestone 8 adds the user-facing RAG workspace without putting API credentials i
 ## Official documentation checked (2026-11-17)
 
 - Next.js App Router, routing and server/client component guidance: [Next.js App Router](https://nextjs.org/docs/app).
+- Next.js flat ESLint configuration: [ESLint configuration](https://nextjs.org/docs/app/api-reference/config/eslint).
 - Next.js proxy file convention and request handling: [Next.js proxy](https://nextjs.org/docs/app/api-reference/file-conventions/proxy).
 - Next.js security headers and CSP guidance: [Next.js headers](https://nextjs.org/docs/app/api-reference/config/next-config-js/headers).
 - Next.js BFF guidance: [Backend for Frontend](https://nextjs.org/docs/app/guides/backend-for-frontend).

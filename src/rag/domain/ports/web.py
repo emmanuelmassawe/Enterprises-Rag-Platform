@@ -7,7 +7,6 @@ from typing import Protocol
 from uuid import UUID
 
 
-
 class WebRepository(Protocol):
     """Tenant-bound persistence used by conversations, collections and admin views."""
 
@@ -19,7 +18,9 @@ class WebRepository(Protocol):
         self, tenant_id: UUID, name: str, description: str | None
     ) -> dict[str, object]: ...
 
-    async def get_collection(self, tenant_id: UUID, collection_id: UUID) -> dict[str, object] | None: ...
+    async def get_collection(
+        self, tenant_id: UUID, collection_id: UUID
+    ) -> dict[str, object] | None: ...
 
     async def update_collection(
         self, tenant_id: UUID, collection_id: UUID, values: dict[str, object]
@@ -76,5 +77,6 @@ class WebRepository(Protocol):
         reason: str | None,
     ) -> str: ...
 
-    async def usage(self, tenant_id: UUID, since: datetime, until: datetime) -> dict[str, object]: ...
-
+    async def usage(
+        self, tenant_id: UUID, since: datetime, until: datetime
+    ) -> dict[str, object]: ...

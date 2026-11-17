@@ -8,8 +8,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { signOut } from "next-auth/react";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { Archive, ArrowDown, ArrowLeft, ArrowUp, BookOpenCheck, Check, ChevronDown, CircleHelp, FilePlus2, Files, FolderOpen, Languages, LogOut, Menu, MessageSquareText, Moon, MoreHorizontal, Pin, Plus, Search, Settings2, ShieldCheck, Sparkles, Sun, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { Archive, ArrowUp, BookOpenCheck, Check, ChevronDown, CircleHelp, Files, FolderOpen, Languages, LogOut, Menu, MessageSquareText, Moon, MoreHorizontal, Pin, Plus, Search, Settings2, ShieldCheck, Sparkles, Sun, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { apiFetch, idempotencyKey, type Citation, type Collection, type Conversation, type Message, type Page, streamQuery } from "@/lib/api";
 import { KnowledgePanel } from "./knowledge-panel";
 import { AdminPanel } from "./admin-panel";
@@ -54,6 +54,8 @@ export function Workspace({ locale, email, displayName }: { locale: string; emai
     },
   });
   const [localMessages, setLocalMessages] = useState<LocalMessage[]>([]);
+  const [localMessagesConversationId, setLocalMessagesConversationId] = useState<string | null>(null);
+  const visibleMessages = localMessagesConversationId === activeConversation ? localMessages : messages.data ?? [];
   const isAdmin = identity.data?.role === "admin";
   const isEditor = identity.data?.role === "editor" || isAdmin;
   const localeHref = locale === "en" ? "/sw" : "/en";
@@ -61,15 +63,14 @@ export function Workspace({ locale, email, displayName }: { locale: string; emai
   useEffect(() => {
     document.documentElement.lang = locale;
   }, [locale]);
-  const lastLoadedConversation = useRef<string | null>(null);
-  useEffect(() => {
-    if (lastLoadedConversation.current !== activeConversation) {
-      lastLoadedConversation.current = activeConversation;
-      setLocalMessages(messages.data ?? []);
-    } else if (messages.data?.length) {
-      setLocalMessages(messages.data);
-    }
-  }, [messages.data, activeConversation]);
+  const createConversation = useCallback(async (): Promise<void> => {
+    const created = await apiFetch<Conversation>("conversations", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: "New conversation" }) });
+    await queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    setActiveConversation(created.id);
+    setLocalMessages([]);
+    setLocalMessagesConversationId(created.id);
+    setView("chat");
+  }, [queryClient]);
   useEffect(() => {
     const refresh = () => void queryClient.invalidateQueries({ queryKey: ["conversations"] });
     window.addEventListener("sagefield:conversations-changed", refresh);
@@ -87,16 +88,8 @@ export function Workspace({ locale, email, displayName }: { locale: string; emai
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [identity.data]);
+  }, [createConversation]);
   const title = useMemo(() => navigation.find((item) => item.view === view)?.label ?? "chat", [view]);
-
-  async function createConversation(): Promise<void> {
-    const created = await apiFetch<Conversation>("conversations", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: "New conversation" }) });
-    await queryClient.invalidateQueries({ queryKey: ["conversations"] });
-    setActiveConversation(created.id);
-    setLocalMessages([]);
-    setView("chat");
-  }
 
   function changeView(next: View) {
     setView(next);
@@ -106,7 +99,7 @@ export function Workspace({ locale, email, displayName }: { locale: string; emai
 
   async function removeConversation(conversationId: string) {
     await apiFetch<void>(`conversations/${conversationId}`, { method: "DELETE" });
-    if (activeConversation === conversationId) { setActiveConversation(null); setLocalMessages([]); }
+    if (activeConversation === conversationId) { setActiveConversation(null); setLocalMessages([]); setLocalMessagesConversationId(null); }
     await queryClient.invalidateQueries({ queryKey: ["conversations"] });
   }
 
@@ -150,7 +143,7 @@ export function Workspace({ locale, email, displayName }: { locale: string; emai
             <div className="relative mb-2"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={15} /><input className="field min-h-10 border-transparent bg-panel-soft pl-9 text-sm" placeholder={t("search")} value={search} onChange={(event) => setSearch(event.target.value)} aria-label={t("history")} /></div>
             <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
               {(conversations.data?.items ?? []).map((conversation) => <div key={conversation.id} className={`group flex items-center rounded-xl ${activeConversation === conversation.id ? "bg-panel-soft" : "hover:bg-panel-soft"}`}>
-                <button className="flex min-h-10 min-w-0 flex-1 items-center gap-2 px-3 text-left text-[13px] text-muted hover:text-ink" onClick={() => { setActiveConversation(conversation.id); setCitation(null); }}><MessageSquareText size={15} className="shrink-0" /><span className="truncate">{conversation.title}</span>{conversation.pinned && <Pin size={12} className="shrink-0 text-gold" />}</button>
+                <button className="flex min-h-10 min-w-0 flex-1 items-center gap-2 px-3 text-left text-[13px] text-muted hover:text-ink" onClick={() => { setActiveConversation(conversation.id); setLocalMessagesConversationId(null); setCitation(null); }}><MessageSquareText size={15} className="shrink-0" /><span className="truncate">{conversation.title}</span>{conversation.pinned && <Pin size={12} className="shrink-0 text-gold" />}</button>
                 <div className="flex pr-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
                   <button className="icon-button !min-h-8 !min-w-8" title={conversation.pinned ? t("unpin") : t("pin")} aria-label={conversation.pinned ? t("unpin") : t("pin")} onClick={() => void togglePin(conversation)}><Pin size={13} /></button>
                   <button className="icon-button !min-h-8 !min-w-8" title={t("rename")} aria-label={t("rename")} onClick={() => void renameConversation(conversation)}><MoreHorizontal size={16} /></button>
@@ -171,7 +164,7 @@ export function Workspace({ locale, email, displayName }: { locale: string; emai
             <div className="flex items-center gap-1.5"><button className="icon-button" onClick={changeLocale} aria-label={t("language")} title={t("language")}><Languages size={18} /><span className="ml-1 text-[11px] font-bold uppercase">{locale}</span></button><button className="icon-button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label={t("theme")} title={t("theme")}>{theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}</button><button className="icon-button hidden sm:flex" onClick={() => window.dispatchEvent(new Event("sagefield:shortcuts"))} aria-label={t("keyboard")} title={t("keyboard")}><CircleHelp size={18} /></button></div>
           </header>
           <main id="main-content" className="flex-1 p-3 sm:p-5 lg:p-7">
-            {view === "chat" && <ChatView t={t} collections={collections.data?.items ?? []} selectedCollections={selectedCollections} setSelectedCollections={setSelectedCollections} conversations={conversations.data?.items ?? []} activeConversation={activeConversation} setActiveConversation={setActiveConversation} messages={localMessages} setMessages={setLocalMessages} queryBox={queryBox} citation={citation} setCitation={setCitation} />}
+            {view === "chat" && <ChatView t={t} collections={collections.data?.items ?? []} selectedCollections={selectedCollections} setSelectedCollections={setSelectedCollections} conversations={conversations.data?.items ?? []} activeConversation={activeConversation} setActiveConversation={setActiveConversation} setLocalMessagesConversationId={setLocalMessagesConversationId} messages={visibleMessages} setMessages={setLocalMessages} queryBox={queryBox} citation={citation} setCitation={setCitation} />}
             {view === "knowledge" && <KnowledgePanel canEdit={isEditor} />}
             {view === "admin" && (isAdmin ? <AdminPanel /> : <section className="surface mx-auto max-w-3xl p-8"><p className="font-semibold">Admin access required</p><p className="mt-2 text-sm text-muted">Your API credential does not grant tenant administrator access.</p></section>)}
             {view === "settings" && <SettingsPanel t={t} email={email} locale={locale} />}
@@ -183,8 +176,8 @@ export function Workspace({ locale, email, displayName }: { locale: string; emai
   );
 }
 
-function ChatView({ t, collections, selectedCollections, setSelectedCollections, conversations, activeConversation, setActiveConversation, messages, setMessages, queryBox, citation, setCitation }: {
-  t: ReturnType<typeof useTranslations>; collections: Collection[]; selectedCollections: string[]; setSelectedCollections: (ids: string[]) => void; conversations: Conversation[]; activeConversation: string | null; setActiveConversation: (id: string | null) => void; messages: LocalMessage[]; setMessages: React.Dispatch<React.SetStateAction<LocalMessage[]>>; queryBox: React.RefObject<HTMLTextAreaElement | null>; citation: Citation | null; setCitation: (citation: Citation | null) => void;
+function ChatView({ t, collections, selectedCollections, setSelectedCollections, conversations, activeConversation, setActiveConversation, setLocalMessagesConversationId, messages, setMessages, queryBox, citation, setCitation }: {
+  t: ReturnType<typeof useTranslations>; collections: Collection[]; selectedCollections: string[]; setSelectedCollections: (ids: string[]) => void; conversations: Conversation[]; activeConversation: string | null; setActiveConversation: (id: string | null) => void; setLocalMessagesConversationId: (id: string | null) => void; messages: LocalMessage[]; setMessages: React.Dispatch<React.SetStateAction<LocalMessage[]>>; queryBox: React.RefObject<HTMLTextAreaElement | null>; citation: Citation | null; setCitation: (citation: Citation | null) => void;
 }) {
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
@@ -195,8 +188,6 @@ function ChatView({ t, collections, selectedCollections, setSelectedCollections,
   const [showHelp, setShowHelp] = useState(false);
   const [controller, setController] = useState<AbortController | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const tRef = useRef(t);
-  tRef.current = t;
   const active = conversations.find((conversation) => conversation.id === activeConversation);
 
   useEffect(() => {
@@ -222,8 +213,10 @@ function ChatView({ t, collections, selectedCollections, setSelectedCollections,
       if (!conversationId) {
         const created = await apiFetch<Conversation>("conversations", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: "New conversation" }) });
         conversationId = created.id; setActiveConversation(created.id);
+        setLocalMessagesConversationId(created.id);
         window.dispatchEvent(new Event("sagefield:conversations-changed"));
       }
+      setLocalMessagesConversationId(conversationId);
       const userMessage: LocalMessage = { id: crypto.randomUUID(), role: "user", content: text, citations: [], request_id: null, created_at: new Date().toISOString() };
       const assistant: LocalMessage = { id: crypto.randomUUID(), role: "assistant", content: "", citations: [], request_id: null, created_at: new Date().toISOString(), provisional: true, state: "retrieving" };
       setMessages((current) => [...current, userMessage, assistant]);
@@ -241,7 +234,7 @@ function ChatView({ t, collections, selectedCollections, setSelectedCollections,
           return;
         }
         if (name === "refusal") {
-          const textValue = typeof data.message === "string" ? data.message : tRef.current("insufficient");
+          const textValue = typeof data.message === "string" ? data.message : t("insufficient");
           setStreamStatus("refused");
           setMessages((current) => current.map((item) => item.id === assistant.id ? { ...item, content: textValue, state: "refused" } : item));
           return;
@@ -254,7 +247,7 @@ function ChatView({ t, collections, selectedCollections, setSelectedCollections,
         }
         if (name === "error") {
           const problem = typeof data.problem === "object" && data.problem !== null ? data.problem as Record<string, unknown> : {};
-          throw new Error(typeof problem.detail === "string" ? problem.detail : tRef.current("networkError"));
+          throw new Error(typeof problem.detail === "string" ? problem.detail : t("networkError"));
         }
       });
       window.dispatchEvent(new Event("sagefield:conversations-changed"));

@@ -229,17 +229,17 @@ class PostgresIngestionRepository:
                 )
                 jobs = list(jobs_result.all())
                 latest: dict[UUID, Job] = {}
-                for job in jobs:
-                    if job.document_id is not None:
-                        latest.setdefault(job.document_id, job)
+                for candidate_job in jobs:
+                    if candidate_job.document_id is not None:
+                        latest.setdefault(candidate_job.document_id, candidate_job)
             for item in output:
                 document_id = UUID(str(item["id"]))
-                job = latest.get(document_id)
-                item["job_id"] = job.id if job is not None else None
-                item["progress"] = job.progress if job is not None else 100
-                item["stage"] = job.stage if job is not None else item["status"]
-                item["retryable"] = job.retryable if job is not None else False
-                item["error_code"] = job.error_code if job is not None else None
+                latest_job = latest.get(document_id)
+                item["job_id"] = latest_job.id if latest_job is not None else None
+                item["progress"] = latest_job.progress if latest_job is not None else 100
+                item["stage"] = latest_job.stage if latest_job is not None else item["status"]
+                item["retryable"] = latest_job.retryable if latest_job is not None else False
+                item["error_code"] = latest_job.error_code if latest_job is not None else None
         return output, rows[-1].id if has_more and rows else None
 
     async def get_document(self, tenant_id: UUID, document_id: UUID) -> dict[str, object] | None:

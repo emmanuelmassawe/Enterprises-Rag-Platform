@@ -17,13 +17,13 @@ export default async function LoginPage({ params }: { params: Promise<{ locale: 
             <div className="relative max-w-lg">
               <p className="mb-5 text-xs font-semibold uppercase tracking-[.22em] text-[#bdd5c3]">A calmer way to find what matters</p>
               <h1 className="text-5xl font-medium leading-[1.08] tracking-[-.04em]">Know where your answers come from.</h1>
-              <p className="mt-6 max-w-md text-base leading-7 text-[#d1ded5]">Bring your team's trusted documents into one thoughtful workspace. Every answer stays connected to its source.</p>
+              <p className="mt-6 max-w-md text-base leading-7 text-[#d1ded5]">Bring your team&apos;s trusted documents into one thoughtful workspace. Every answer stays connected to its source.</p>
             </div>
             <div className="relative flex items-center gap-2 text-sm text-[#c4d5ca]"><ShieldCheck size={17} />Private by design · evidence in view</div>
           </div>
           <div className="flex min-h-[620px] flex-col justify-center p-7 sm:p-12 lg:p-16">
             <div className="mb-12 flex items-center gap-3 lg:hidden"><span className="grid h-11 w-11 place-items-center rounded-2xl bg-brand text-white"><BookOpenCheck size={22} /></span><span className="text-lg font-semibold">{t("product")}</span></div>
-            <p className="text-xs font-semibold uppercase tracking-[.2em] text-brand">Your team's knowledge, considered</p>
+            <p className="text-xs font-semibold uppercase tracking-[.2em] text-brand">Your team&apos;s knowledge, considered</p>
             <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">Welcome to your workspace</h2>
             <p className="mt-4 max-w-sm leading-7 text-muted">{t("signInHelp")}</p>
             <form action={async () => { "use server"; await signIn("google", { redirectTo: `/${locale}` }); }} className="mt-9">

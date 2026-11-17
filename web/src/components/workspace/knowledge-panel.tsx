@@ -3,7 +3,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { FilePlus2, FileText, FolderPlus, LoaderCircle, MoreHorizontal, RefreshCw, Search, Trash2, UploadCloud, X } from "lucide-react";
+import { FilePlus2, FileText, FolderPlus, LoaderCircle, RefreshCw, Search, Trash2, UploadCloud, X } from "lucide-react";
 import { useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { apiFetch, idempotencyKey, type Collection, type Page } from "@/lib/api";
 
@@ -122,7 +122,7 @@ export function KnowledgePanel({ canEdit }: { canEdit: boolean }) {
           {canEdit ? <div className={`surface p-5 transition-colors ${dragActive ? "border-brand bg-brand-tint" : ""}`} onDragEnter={(event) => { event.preventDefault(); setDragActive(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={() => setDragActive(false)} onDrop={onDrop}>
             <div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-brand-tint text-brand"><UploadCloud size={19} /></span><div><h3 className="text-sm font-semibold">{t("upload")}</h3><p className="mt-0.5 text-xs text-muted">{t("uploadHelp")}</p></div></div>
             <label className="mt-4 block text-xs font-medium text-muted">{t("collection")}<select className="field mt-1.5 text-sm" value={selectedCollection} onChange={(event) => setSelectedCollection(event.target.value)}><option value="">Select a collection</option>{collections.data?.items.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}</select></label>
-            <button className="mt-4 flex min-h-32 w-full flex-col items-center justify-center rounded-xl border border-dashed border-line bg-panel-soft px-4 text-center transition-colors hover:border-brand" onClick={() => inputRef.current?.click()} onKeyDown={(event) => { if (event.key === "Enter") inputRef.current?.click(); }}><FilePlus2 size={22} className="text-brand" /><span className="mt-2 text-sm font-semibold">{t("drop")}</span><span className="mt-1 text-[11px] text-muted">Your administrator's upload limit is enforced by the server.</span></button>
+            <button className="mt-4 flex min-h-32 w-full flex-col items-center justify-center rounded-xl border border-dashed border-line bg-panel-soft px-4 text-center transition-colors hover:border-brand" onClick={() => inputRef.current?.click()} onKeyDown={(event) => { if (event.key === "Enter") inputRef.current?.click(); }}><FilePlus2 size={22} className="text-brand" /><span className="mt-2 text-sm font-semibold">{t("drop")}</span><span className="mt-1 text-[11px] text-muted">Your administrator&apos;s upload limit is enforced by the server.</span></button>
             <input ref={inputRef} className="sr-only" type="file" accept="application/pdf,.pdf" multiple onChange={onFiles} aria-label={t("upload")} />
             <p className="mt-3 text-[11px] leading-5 text-muted">PDFs are uploaded directly through the same-origin server. Files stay private to your tenant.</p>
           </div> : <div className="surface p-5"><h3 className="text-sm font-semibold">Read-only access</h3><p className="mt-2 text-xs leading-5 text-muted">Your role can browse documents. An editor can add or remove files.</p></div>}
