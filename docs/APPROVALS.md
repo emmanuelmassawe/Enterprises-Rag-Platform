@@ -10,7 +10,7 @@ Only the human owner ticks these boxes. The coding agent must not start a milest
 - [ tick ] Milestone 5: Observability (LangSmith, Grafana instrumentation), resilience, AI security layer, red-team suite
 - [ tick ] Milestone 6: Evaluation harness and golden dataset
 - [tick ] Milestone 7: Terraform (Render, Redis x2, Alloy, Grafana), staging deploy
-- [ ] Milestone 8: Web UI/UX
+- [ tick ] Milestone 8: Web UI/UX
 - [ ] Milestone 9: Production Readiness Review, documentation polish, go/no-go
 
 ## Owner notes and decisions
