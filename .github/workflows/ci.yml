@@ -63,6 +63,9 @@ jobs:
       - name: Install locked dependencies
         run: uv sync --all-groups --locked
 
+      - name: Check Markdown links and fenced blocks
+        run: uv run python scripts/check_docs.py
+
       - name: Prepare least-privilege runtime role
         run: >-
           docker exec "${{ job.services.postgres.id }}" psql -U rag_migrator -d enterprise_rag
@@ -78,8 +81,8 @@ jobs:
           docker exec "${{ job.services.postgres.id }}" psql -U rag_migrator -d enterprise_rag -v ON_ERROR_STOP=1 -c "INSERT INTO tenants(id,name) VALUES ('00000000-0000-0000-0000-000000000001','synthetic-a'),('00000000-0000-0000-0000-000000000002','synthetic-b')"
           visible_count="$(docker exec "${{ job.services.postgres.id }}" psql -U rag_runtime -d enterprise_rag -qAt -v ON_ERROR_STOP=1 -c "SET app.tenant_id='00000000-0000-0000-0000-000000000001'; SELECT count(*) FROM tenants")"
           test "$visible_count" = "1"
-          rls_count="$(docker exec "${{ job.services.postgres.id }}" psql -U rag_migrator -d enterprise_rag -qAt -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM pg_class WHERE relnamespace='public'::regnamespace AND relkind='r' AND relname IN ('tenants','users','api_keys','idempotency_records','collections','documents','chunks','jobs','conversations','messages','query_logs') AND relrowsecurity AND relforcerowsecurity")"
-          test "$rls_count" = "11"
+          rls_count="$(docker exec "${{ job.services.postgres.id }}" psql -U rag_migrator -d enterprise_rag -qAt -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM pg_class WHERE relnamespace='public'::regnamespace AND relkind='r' AND relname IN ('tenants','users','api_keys','idempotency_records','collections','documents','chunks','jobs','conversations','messages','query_logs','quarantine_decisions') AND relrowsecurity AND relforcerowsecurity")"
+          test "$rls_count" = "12"
           create_privilege="$(docker exec "${{ job.services.postgres.id }}" psql -U rag_migrator -d enterprise_rag -At -v ON_ERROR_STOP=1 -c "SELECT has_schema_privilege('rag_runtime','public','CREATE')")"
           test "$create_privilege" = "f"
           uv run alembic upgrade head

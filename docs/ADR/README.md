@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-Status: ADR-001 through ADR-011 were approved with Phase 0. ADR-012 records Milestone 2, ADR-013 Milestone 3, ADR-014 Milestone 4, ADR-015 the Milestone 5 implementation, ADR-016 the Milestone 6 evaluation approach, ADR-017 the Milestone 7 infrastructure configuration and deployment gates, and ADR-018 the Milestone 8 web BFF implementation (approval pending).
+Status: ADR-001 through ADR-011 were approved with Phase 0. ADR-012 through ADR-017 record implementation decisions made in Milestones 2–7. ADR-018 records the Milestone 8 web BFF implementation; its owner approval remains pending. M9 found a migration/metadata index discrepancy; no schema change was made because it requires an owner-approved ADR.
 
 | ADR | Decision |
 |---|---|

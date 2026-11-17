@@ -89,6 +89,48 @@ M6's synthetic dataset and provider setup assumptions are documented in [the eva
 
 Milestone 8 is implementation-complete but not production-ready. Do not infer WCAG conformance, Lighthouse budgets, deployed availability or end-to-end login from the code alone.
 
+## Milestone 9 evidence (2026-11-17)
+
+| Area | Evidence | Result |
+|---|---|---|
+| Full provider-free suite | `uv run coverage run --data-file=<temporary-file> -m pytest -q -p no:cacheprovider --basetemp=<temporary-directory>` | 115 passed. Workspace API/repository tests use fakes; no live provider calls. |
+| Branch-aware coverage | `uv run coverage report --data-file=<temporary-file> --fail-under=80` | 83%; passed. Initial run was 76%; additional behavior tests raised the final result above the gate. |
+| Static and dependency checks | `uv run ruff check .`; `uv run ruff format --check .`; `uv run mypy src`; `uv run lint-imports`; `uv run pip-audit --skip-editable` | All passed; 135 files formatted, 70 source files type-checked, both import contracts kept, no known audited dependency vulnerabilities. |
+| Red-team suite | `uv run pytest -q -p no:cacheprovider tests/security` | 5 passed using synthetic inputs. This is not live-model ASR coverage. |
+| Compose configuration | `docker compose config --quiet`; `docker compose --profile observability config --quiet` | Both configurations parsed successfully. Services were not launched for production-like verification. |
+| Empty PostgreSQL migration | `uv run alembic upgrade head` against an isolated, ephemeral `pgvector/pgvector:pg17` container | All migrations applied through `e86a1d7c4b29`. Container used no volume and no customer data. |
+| RLS and populated database | Inserted two synthetic tenants; queried as `rag_runtime` with one `app.tenant_id`; checked forced RLS on tenant tables | One tenant visible; all 12 tenant tables reported both row security and forced row security. Populated-upgrade replay/restore drill was not run. |
+| Alembic metadata parity | `uv run alembic check` against the fresh migrated database | **Failed**: metadata proposes removal of `ix_conversations_tenant_owner_key_updated`. This discrepancy needs an owner-approved ADR and migration/metadata resolution before release. |
+| Web and Terraform | M8 evidence above; no new web or Terraform implementation in M9 | Prior M8 lint/type/build and Terraform fmt/init/validate evidence remains. No browser, staging plan or deployment evidence. |
+| Load, resilience, backup, deploy, alert, cost and provider checks | See [release decision and gates](#release-decision-and-unverified-gates) | Not run: there is no configured staging environment, owner-approved test identity, provider account configuration, spend cap, or backup target. |
+| Diff integrity | `git diff --check` | Passed after documentation changes. |
+
+## Release decision and unverified gates
+
+**Recommendation: NO-GO for production.** This is the engineering recommendation, not the owner's release decision. The M9 checkbox and owner decision remain pending. No production credentials were requested or used, and no production Terraform plan/apply was run.
+
+| Gate | Status | Evidence required to close |
+|---|---|---|
+| Requirements, API contract and owner decisions | Pending owner confirmation | Approve current documents and resolve proposed model, dimensions, region, retention, budget and license questions. |
+| Migration/schema parity | Blocked | ADR and approved migration/metadata correction for the conversation index discrepancy; then empty/populated checks pass. |
+| Requirement traceability | Partial | `docs/TRACEABILITY.md` has mappings, but many tests and monitoring evidence are not yet present; close each row against executed evidence. |
+| Security and secrets | Partial | No public-repository secret finding observed in current M9 checks; run the complete CI secret and image scans, configure protected staging secrets and test rotation. |
+| Dependency/image security | Partial | Python `pip-audit` clean; npm audit and Terraform provider validation are recorded in M8. No full image scan/SBOM evidence. |
+| Resilience/fault injection | Not verified | Exercise Postgres, both Redis roles, blob, LLM/embedding outage, timeout, worker interruption, duplicate delivery and partial-write scenarios. |
+| Load/soak/spike and SLOs | Not measured | Run staging traffic with agreed workload/model; record p95/p99, throughput, saturation and memory against [SLOs](SLO.md). |
+| Backups and recovery | Not verified | Restore a staging backup to a clean instance, validate pgvector/data, measure RTO/RPO and record Redis state expectations. |
+| Deploy and rollback | Not verified | Rehearse health-gated staging deployment, rollback and post-deploy smoke test. |
+| Monitoring and alert response | Partial | Local Compose config parses; exercise a staging alert, notification path, synthetic canary and incident handling. |
+| Cost, spend cap and kill switch | Not verified | Owner selects plans/region; document per-environment cost, provider budget alert/cap and generation kill-switch exercise. |
+| Web accessibility/browser evidence | Not verified | Authenticated Playwright, axe and Lighthouse runs with a non-production Google test identity; record screenshots and results. |
+| Owner go/no-go | Pending | Owner decision, name/role, date and approval record after all accepted gates are reviewed. |
+
+### M9 engineering recommendation
+
+The local code-quality gates, provider-free tests, red-team tests, Compose parsing, empty migration and basic RLS visibility check passed. These results do not establish live provider behavior, production availability, performance, accessibility, restore readiness or cost controls. The schema parity finding is a concrete blocker; the remaining unverified gates above also prevent a production go decision.
+
+**Owner decision:** Pending. **Owner:** Pending. **Date:** Pending.
+
 ## Remaining release gates
 
 - Confirm proposed `gemini-embedding-2` and 768 dimensions, account region, retention and spend limits; add a dimension-specific vector index in a new approved migration and benchmark it with tenant filters.

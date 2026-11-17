@@ -1,6 +1,6 @@
 # Service Level Objectives
 
-The numeric targets below are proposed, confirm with owner. No staging or production measurement is available in M5.
+The numeric targets below are proposed, confirm with owner. No staging or production measurement is available as of M9 (2026-11-17). They are not claims of achieved service levels.
 
 | SLI | Proposed objective | Measurement | Alert response |
 |---|---|---|---|
