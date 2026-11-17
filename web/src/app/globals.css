@@ -1,0 +1,84 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+  --canvas: #f5f7f4;
+  --panel: #ffffff;
+  --panel-soft: #eef3ef;
+  --ink: #18251f;
+  --muted: #65746c;
+  --line: #dfe7e1;
+  --brand: #236b53;
+  --brand-strong: #174c3c;
+  --brand-tint: #e3f1e9;
+  --gold: #c49a52;
+  --danger: #a13e3e;
+  --focus: #bd8a36;
+  --radius-card: 1.25rem;
+  --shadow-card: 0 16px 50px rgb(31 62 46 / 7%);
+}
+
+.dark {
+  color-scheme: dark;
+  --canvas: #111a16;
+  --panel: #18231d;
+  --panel-soft: #202e26;
+  --ink: #e9f0eb;
+  --muted: #a4b4aa;
+  --line: #34443a;
+  --brand: #70c29e;
+  --brand-strong: #a6e1c2;
+  --brand-tint: #213d30;
+  --gold: #e0bd7d;
+  --danger: #ff9494;
+  --focus: #e0bd7d;
+  --shadow-card: 0 16px 50px rgb(0 0 0 / 22%);
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-panel: var(--panel);
+  --color-panel-soft: var(--panel-soft);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --font-sans: "Aptos", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html { min-width: 320px; background: var(--canvas); }
+body { min-height: 100vh; margin: 0; background: var(--canvas); color: var(--ink); font-family: "Aptos", "Segoe UI", ui-sans-serif, system-ui, sans-serif; }
+button, input, textarea, select { font: inherit; }
+button { -webkit-tap-highlight-color: transparent; }
+::selection { background: color-mix(in srgb, var(--brand) 22%, transparent); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+a { color: inherit; }
+
+.surface { border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--panel); box-shadow: var(--shadow-card); }
+.surface-soft { border: 1px solid var(--line); border-radius: 1rem; background: var(--panel-soft); }
+.icon-button { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: 0.8rem; color: var(--muted); transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease; }
+.icon-button:hover { background: var(--panel-soft); color: var(--ink); }
+.primary-button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 0.55rem; border-radius: 0.85rem; background: var(--brand); padding: 0.65rem 1rem; color: #fff; font-weight: 650; transition: background-color 160ms ease, transform 160ms ease; }
+.dark .primary-button { color: #10261c; }
+.primary-button:hover { background: var(--brand-strong); transform: translateY(-1px); }
+.secondary-button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 0.5rem; border: 1px solid var(--line); border-radius: 0.85rem; background: var(--panel); padding: 0.6rem 0.9rem; color: var(--ink); font-weight: 600; }
+.secondary-button:hover { background: var(--panel-soft); }
+.field { min-height: 44px; width: 100%; border: 1px solid var(--line); border-radius: 0.8rem; background: var(--panel); padding: 0.7rem 0.85rem; color: var(--ink); }
+.field::placeholder { color: var(--muted); opacity: 0.78; }
+.prose-safe :where(p, ul, ol, blockquote, pre) { margin-block: 0.65rem; }
+.prose-safe :where(ul, ol) { padding-inline-start: 1.35rem; }
+.prose-safe ul { list-style: disc; }
+.prose-safe ol { list-style: decimal; }
+.prose-safe blockquote { border-inline-start: 3px solid var(--gold); padding-inline-start: 0.85rem; color: var(--muted); }
+.prose-safe code { border-radius: 0.3rem; background: var(--panel-soft); padding: 0.1rem 0.3rem; font-size: 0.9em; }
+.prose-safe pre { overflow-x: auto; border-radius: 0.8rem; background: var(--panel-soft); padding: 1rem; }
+.prose-safe a { color: var(--brand-strong); text-decoration: underline; text-underline-offset: 2px; }
+.skip-link { position: absolute; z-index: 100; top: 0.5rem; left: 0.5rem; transform: translateY(-150%); border-radius: 0.5rem; background: var(--panel); padding: 0.75rem 1rem; }
+.skip-link:focus { transform: translateY(0); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}

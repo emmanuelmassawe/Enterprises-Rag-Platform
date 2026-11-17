@@ -24,6 +24,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from rag.api.routers.api_keys import router as api_keys_router
 from rag.api.routers.documents import router as documents_router
 from rag.api.routers.query import router as query_router
+from rag.api.routers.workspace import router as workspace_router
 from rag.core.config import Settings, get_settings
 from rag.core.errors import ProblemException
 from rag.core.logging import configure_logging
@@ -31,6 +32,7 @@ from rag.core.telemetry import configure_tracing, current_trace_id
 from rag.domain.ports.api_keys import ApiKeyApplication
 from rag.domain.ports.health import DependencyProbe
 from rag.domain.ports.rate_limiter import RateLimiter
+from rag.domain.ports.web import WebRepository
 
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 REQUESTS = Counter("rag_http_requests_total", "HTTP requests", ["method", "route", "status"])
@@ -222,6 +224,7 @@ def create_app(
     ingestion_queue: Any | None = None,
     query_service: Any | None = None,
     query_cache: Any | None = None,
+    web_repository: WebRepository | None = None,
     clock: Callable[[], float] = time.time,
 ) -> FastAPI:
     """Create an HTTP adapter with application ports supplied by the composition root."""
@@ -257,6 +260,7 @@ def create_app(
     app.include_router(api_keys_router)
     app.include_router(documents_router)
     app.include_router(query_router)
+    app.include_router(workspace_router)
     app.state.settings = resolved
     app.state.database_probe = runtime.database_probe
     app.state.rate_limiter = runtime.rate_limiter
@@ -268,6 +272,7 @@ def create_app(
     app.state.ingestion_queue = ingestion_queue
     app.state.query_service = query_service
     app.state.query_cache = query_cache
+    app.state.web_repository = web_repository
     app.state.clock = clock
     _register_error_handlers(app)
 

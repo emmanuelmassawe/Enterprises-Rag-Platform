@@ -9,6 +9,7 @@ from rag.adapters.generation.gemini import GeminiAnswerGenerator
 from rag.adapters.postgres.api_keys import PostgresApiKeyStore
 from rag.adapters.postgres.ingestion import PostgresIngestionRepository
 from rag.adapters.postgres.query import PostgresQueryRepository
+from rag.adapters.postgres.web import PostgresWebRepository
 from rag.adapters.redis.ingestion_queue import ArqIngestionQueue
 from rag.adapters.redis.query_cache import RedisQueryCache
 from rag.adapters.redis.rate_limiter import FallbackRateLimiter, MemoryRateLimiter, RedisRateLimiter
@@ -139,6 +140,7 @@ query_service = (
     if database is not None and query_embeddings is not None and answer_generator is not None
     else None
 )
+web_repository = PostgresWebRepository(database) if database is not None else None
 
 
 async def _cleanup() -> None:
@@ -171,4 +173,5 @@ app = create_app(
     ingestion_queue=ingestion_queue,
     query_service=query_service,
     query_cache=query_cache,
+    web_repository=web_repository,
 )

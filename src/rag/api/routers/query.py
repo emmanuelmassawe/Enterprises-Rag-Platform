@@ -22,6 +22,7 @@ from rag.domain.ports.query import (
     QueryUnavailable,
     QueryValidationError,
 )
+from rag.domain.ports.web import WebRepository
 
 router = APIRouter(prefix="/v1", tags=["Query"])
 
@@ -124,6 +125,41 @@ async def _run_query(
         ) from exc
 
 
+async def _validate_conversation(
+    request: Request, body: QueryInput, principal: Principal
+) -> None:
+    if body.conversation_id is None:
+        return
+    repository = getattr(request.app.state, "web_repository", None)
+    if repository is None:
+        raise ProblemException(
+            503, "dependency_unavailable", "Unavailable", "Conversation storage is unavailable."
+        )
+    page = await repository.list_messages(
+        principal.tenant_id, principal.key_id, body.conversation_id, None, 1
+    )
+    if page is None:
+        raise ProblemException(404, "not_found", "Not found", "Conversation was not found.")
+
+
+async def _persist_exchange(
+    request: Request, body: QueryInput, principal: Principal, result: QueryResultRecord
+) -> None:
+    if body.conversation_id is None:
+        return
+    repository = cast(WebRepository | None, getattr(request.app.state, "web_repository", None))
+    if repository is None or not await repository.append_exchange(
+        principal.tenant_id,
+        principal.key_id,
+        body.conversation_id,
+        body.question,
+        result.answer,
+        [asdict(citation) for citation in result.citations],
+        result.request_id,
+    ):
+        raise ProblemException(404, "not_found", "Not found", "Conversation was not found.")
+
+
 @router.post("/query", response_model=None)
 async def query(
     body: QueryInput,
@@ -132,8 +168,10 @@ async def query(
     service: Annotated[QueryApplication, Depends(_service)],
 ) -> object:
     """Answer from tenant-authorized collection evidence."""
+    await _validate_conversation(request, body, principal)
     if not body.stream:
         result = await _run_query(request, body, principal, service)
+        await _persist_exchange(request, body, principal, result)
         return _output(result, body.debug and principal.role == Role.ADMIN)
 
     async def events() -> AsyncIterator[bytes]:
@@ -145,6 +183,7 @@ async def query(
         )
         try:
             result = await _run_query(request, body, principal, service)
+            await _persist_exchange(request, body, principal, result)
             output = _output(result, body.debug and principal.role == Role.ADMIN)
             yield _event("citations", request_id, citations=output["citations"])
             if result.refusal is not None:

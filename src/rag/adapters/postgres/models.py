@@ -242,12 +242,19 @@ class Conversation(TenantRow, Base):
             ["users.tenant_id", "users.id"],
             ondelete="CASCADE",
         ),
+        ForeignKeyConstraint(
+            ["tenant_id", "owner_key_id"],
+            ["api_keys.tenant_id", "api_keys.id"],
+            ondelete="CASCADE",
+        ),
     )
 
-    owner_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    owner_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    owner_key_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     title: Mapped[str] = mapped_column(
         String(240), nullable=False, server_default="New conversation"
     )
+    pinned: Mapped[bool] = mapped_column(nullable=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -297,6 +304,7 @@ class QueryLog(TenantRow, Base):
     output_tokens: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     feedback: Mapped[str | None] = mapped_column(String(16))
+    feedback_reason: Mapped[str | None] = mapped_column(String(1000))
 
 
 TENANT_TABLES = (
