@@ -1,4 +1,4 @@
-# Enterprise RAG Platform
+# Enterprise Hybrid RAG & LLMOps gateway  Platform
 
 Foundation for a multi-tenant document question-answering service. The current implementation provides FastAPI, PostgreSQL tenant RLS, hashed API-key authentication, Redis-backed rate limiting and ingestion jobs, protected metrics, private PDF ingestion, hybrid retrieval, guarded answers with citations, SSE, evaluations, security controls, and Render/Grafana Terraform. Milestone 8 adds the Next.js workspace with Google OIDC, a server-side BFF, streaming chat, knowledge management, and role-gated admin screens. No paid resources have been created because owner account, region, plans, budget, remote state, and provider values are not configured.
 
