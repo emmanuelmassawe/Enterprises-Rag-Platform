@@ -100,7 +100,7 @@ Milestone 8 is implementation-complete but not production-ready. Do not infer WC
 | Compose configuration | `docker compose config --quiet`; `docker compose --profile observability config --quiet` | Both configurations parsed successfully. Services were not launched for production-like verification. |
 | Empty PostgreSQL migration | `uv run alembic upgrade head` against an isolated, ephemeral `pgvector/pgvector:pg17` container | All migrations applied through `e86a1d7c4b29`. Container used no volume and no customer data. |
 | RLS and populated database | Inserted two synthetic tenants; queried as `rag_runtime` with one `app.tenant_id`; checked forced RLS on tenant tables | One tenant visible; all 12 tenant tables reported both row security and forced row security. Populated-upgrade replay/restore drill was not run. |
-| Alembic metadata parity | `uv run alembic check` against the fresh migrated database | **Failed**: metadata proposes removal of `ix_conversations_tenant_owner_key_updated`. This discrepancy needs an owner-approved ADR and migration/metadata resolution before release. |
+| Alembic metadata parity | `uv run alembic check` against the fresh migrated database | **Failed at M9**: metadata proposed removal of `ix_conversations_tenant_owner_key_updated`. The M10 metadata correction and populated replay passed locally; the new CI gate is awaiting its first run. |
 | Web and Terraform | M8 evidence above; no new web or Terraform implementation in M9 | Prior M8 lint/type/build and Terraform fmt/init/validate evidence remains. No browser, staging plan or deployment evidence. |
 | Load, resilience, backup, deploy, alert, cost and provider checks | See [release decision and gates](#release-decision-and-unverified-gates) | Not run: there is no configured staging environment, owner-approved test identity, provider account configuration, spend cap, or backup target. |
 | Diff integrity | `git diff --check` | Passed after documentation changes. |
@@ -112,7 +112,7 @@ Milestone 8 is implementation-complete but not production-ready. Do not infer WC
 | Gate | Status | Evidence required to close |
 |---|---|---|
 | Requirements, API contract and owner decisions | Pending owner confirmation | Approve current documents and resolve proposed model, dimensions, region, retention, budget and license questions. |
-| Migration/schema parity | Blocked | ADR and approved migration/metadata correction for the conversation index discrepancy; then empty/populated checks pass. |
+| Migration/schema parity | Verification pending | Run CI after the index metadata correction; confirm empty upgrade, populated replay, and `alembic check` all pass. |
 | Requirement traceability | Partial | `docs/TRACEABILITY.md` has mappings, but many tests and monitoring evidence are not yet present; close each row against executed evidence. |
 | Security and secrets | Partial | No public-repository secret finding observed in current M9 checks; run the complete CI secret and image scans, configure protected staging secrets and test rotation. |
 | Dependency/image security | Partial | Python `pip-audit` clean; npm audit and Terraform provider validation are recorded in M8. No full image scan/SBOM evidence. |
@@ -130,6 +130,16 @@ Milestone 8 is implementation-complete but not production-ready. Do not infer WC
 The local code-quality gates, provider-free tests, red-team tests, Compose parsing, empty migration and basic RLS visibility check passed. These results do not establish live provider behavior, production availability, performance, accessibility, restore readiness or cost controls. The schema parity finding is a concrete blocker; the remaining unverified gates above also prevent a production go decision.
 
 **Owner decision:** Pending. **Owner:** Pending. **Date:** Pending.
+
+## M10 deployment and schema review (2026-11-18)
+
+The staging workflow now separates HCP Terraform saved-plan creation from apply. The apply job references the saved HCP run ID and calls the HCP Runs API only after the staging Environment job gate; it does not generate a second plan or upload the Terraform plan file. A one-day GitHub artifact contains only commit, run ID, aggregate action counts and the apply-needed flag. This repository is public, so the summary is public and is not a confidentiality boundary; detailed plans remain in HCP Terraform. No Terraform plan or apply was run while preparing this change.
+
+The Render migration URL was removed from the shared API/worker environment group and added as a command-scoped variable to the API pre-deploy command. Render documents that pre-deploy commands run on a separate instance; access to Terraform state, saved plans and Render service configuration must remain limited because the connection is privileged. The Alloy creation condition now depends on the API scrape target only. The API OTLP endpoint can therefore be supplied after Alloy's private hostname is allocated. The two deployment passes are documented in `infra/terraform/README.md`.
+
+The conversation index is now included in SQLAlchemy metadata and CI runs `alembic check`. A fresh, no-volume pgvector/PostgreSQL container passed an empty migration, two synthetic tenant inserts, populated migration replay, and `alembic check` (`No new upgrade operations detected`). The provider-free suite passed 119 tests; Ruff, formatting, mypy, import-linter, YAML parsing, and Markdown checks passed. Terraform 1.17.2 `fmt -check -recursive`, `init -backend=false`, and `validate` passed with pinned providers. CI itself has not been triggered. No Render/Grafana deployment, live provider connectivity, staging Environment reviewer configuration, or saved-plan API call was verified. `terraform providers schema -json` did not complete because the configuration's remote backend required initialization; no remote backend was initialized. No Terraform plan or apply was run. See [ADR-019](ADR/ADR-019-staging-deploy-and-schema-hardening.md) for decisions and official documentation checked.
+
+The Gemini answer-generation adapter uses the existing `EMBEDDING_API_KEY`; there is no separate generation key setting. Staging provides it in `TERRAFORM_APP_SECRETS_JSON` under the `staging.EMBEDDING_API_KEY` entry.
 
 ## Remaining release gates
 

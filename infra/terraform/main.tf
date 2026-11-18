@@ -4,7 +4,7 @@ locals {
   grafana_environments     = var.deploy_grafana_resources ? toset(["staging"]) : toset([])
   telemetry_environments = toset([
     for environment in local.application_environments : environment
-    if var.deploy_grafana_resources && contains(keys(var.alloy_otlp_endpoints), environment) && contains(keys(var.api_metrics_targets), environment)
+    if var.deploy_grafana_resources && contains(keys(var.api_metrics_targets), environment)
   ])
   names = {
     for environment in local.environments : environment => "rag-${environment}"
@@ -74,7 +74,6 @@ resource "render_env_group" "runtime" {
   env_vars = {
     APP_ENV                     = { value = each.key }
     DATABASE_URL                = { value = var.database_runtime_urls[each.key] }
-    MIGRATION_DATABASE_URL      = { value = replace(render_postgres.platform[each.key].connection_info.internal_connection_string, "postgresql://", "postgresql+asyncpg://") }
     REDIS_URL                   = { value = render_redis.state[each.key].connection_info.internal_connection_string }
     CACHE_REDIS_URL             = { value = render_redis.cache[each.key].connection_info.internal_connection_string }
     BLOB_BACKEND                = { value = "s3" }
@@ -102,7 +101,7 @@ resource "render_web_service" "api" {
   region                     = var.region
   environment_id             = render_project.platform.environments[each.key].id
   start_command              = "uvicorn rag.composition:app --app-dir src --host 0.0.0.0 --port 10000 --no-server-header"
-  pre_deploy_command         = "alembic upgrade head"
+  pre_deploy_command         = "MIGRATION_DATABASE_URL='${replace(render_postgres.platform[each.key].connection_info.internal_connection_string, "postgresql://", "postgresql+asyncpg://")}' alembic upgrade head"
   health_check_path          = "/readyz"
   max_shutdown_delay_seconds = 60
   num_instances              = 1

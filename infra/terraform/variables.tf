@@ -122,7 +122,7 @@ variable "database_runtime_urls" {
 }
 
 variable "alloy_otlp_endpoints" {
-  description = "Environment -> Alloy OTLP HTTP URL using the Render private hostname, supplied after initial service creation."
+  description = "Environment -> Alloy OTLP HTTP URL using the Render private hostname, supplied after Alloy has been created and its private address is known."
   type        = map(string)
   default     = {}
 }

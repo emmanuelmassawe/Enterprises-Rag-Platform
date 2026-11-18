@@ -13,24 +13,37 @@ Initialize with a local untracked backend configuration file, then run `terrafor
 
 ## Plan and apply policy
 
-`make tf-plan` is the local plan entry point once HCP Terraform state and protected inputs are available. `make tf-apply` intentionally refuses. Pull-request CI runs formatting and validation without provider credentials. Apply is performed by the protected CI workflow, only for staging in M7. Production resources are disabled by default (`deploy_production = false`) and production applies are outside this milestone and forbidden from local shells.
+`make tf-plan` is the local plan entry point once HCP Terraform state and protected inputs are available. `make tf-apply` intentionally refuses. Pull-request CI runs formatting and validation without provider credentials. The staging workflow now has separate `plan` and `apply` jobs. The plan job creates an HCP Terraform saved plan and uploads only a counts/commit/run-ID summary; it never applies. The apply job references that same HCP run and queues its apply only after the `staging` GitHub Environment's reviewer gate passes. Configure required reviewers on that Environment. Since this repository is public, GitHub artifacts are not confidential: the uploaded summary contains no resource addresses or values, and the actual plan remains in access-controlled HCP Terraform. The HCP API token must be a user or team token authorized to apply workspace runs; an organization token cannot call the apply endpoint. Production resources are disabled by default (`deploy_production = false`) and production applies are outside this milestone and forbidden from local shells.
+
+The workflow targets `main`, but the checked-out repository currently has local `master` tracking `origin/master`, and the remote has no `main` branch. From this checkout, run these commands to create and track `main` without deleting `master`:
+
+```sh
+git fetch origin
+git switch master
+git branch -m main
+git push -u origin main
+```
+
+Then change the repository's default branch to `main` in GitHub Settings → Branches, and set the staging Environment's deployment branch policy to `main`. Verify locally with `git branch -vv` and `git ls-remote --heads origin main master`. Do not delete `origin/master` until GitHub confirms `main` is the default and branch protections/workflows are retargeted.
 
 The protected manual workflow supports staged setup so generated Render hostnames and dependent credentials do not block the initial resources:
 
 1. Leave `deploy_application_services` and `deploy_grafana_resources` false. Choose the region and paid Postgres/Redis plans. This creates the isolated Render project, staging Postgres, and two Redis instances.
 2. Create the least-privilege `rag_runtime` Postgres role, provision an S3-compatible bucket, select a service plan, and configure staging app secrets. Re-run with `deploy_application_services` true. This deploys the API and worker.
-3. After Render exposes the API and Alloy private hostnames, configure the protected Grafana stack values, `api_metrics_targets`, and `alloy_otlp_endpoints`. Re-run with `deploy_grafana_resources` true. This provisions Grafana resources and Alloy telemetry collection when both target maps include staging.
+3. To resolve Alloy's generated-hostname dependency in two passes, first configure the protected Grafana stack values and `api_metrics_targets` after the API hostname exists, leave `alloy_otlp_endpoints` empty, and run with `deploy_grafana_resources` true. This creates the Grafana resources and Alloy private service while API OTLP export remains unset. Read Alloy's internal Service Address from Render's Connect view, then set `TERRAFORM_ALLOY_OTLP_ENDPOINTS_JSON` to the staging OTLP HTTP URL using that private hostname and port 4318; run the same inputs again. This updates the API env group to send telemetry to Alloy. Alloy creation is gated by the API scrape target, not its own not-yet-existing hostname.
 4. After Google OAuth, the public web origin, an API URL reachable from the web service, and the protected identity directory are configured, re-run with both `deploy_application_services` and `deploy_web_service` true. Set the `TERRAFORM_WEB_ORIGINS_JSON`, `TERRAFORM_WEB_RAG_API_URLS_JSON`, optional `TERRAFORM_WEB_FARO_URLS_JSON`, and protected `TERRAFORM_WEB_SECRETS_JSON` environment values. The web service receives only its own Auth.js/OIDC/identity/Faro configuration, not the API and worker environment group.
 
-Each dispatch produces and applies a saved plan only on `main` inside the protected `staging` environment. Review the inputs and protected environment configuration before dispatch; workflow logs withhold provider plan/apply output because this repository is public.
+Each dispatch creates a saved plan only on `main`. When that plan contains changes, the apply job queues that exact HCP run only after the `staging` Environment reviewer gate passes. Review the HCP plan before approving apply; workflow logs withhold provider plan/apply output because this repository is public.
 
-Terraform state contains sensitive connection values even when outputs and variables are marked sensitive. Treat remote state and saved plans as secrets. Do not publish a plan file or its output in public logs/artifacts.
+Terraform state contains sensitive connection values even when outputs and variables are marked sensitive. Treat remote state and saved plans as secrets. Do not publish a plan file or its output in public logs/artifacts. HCP Terraform retains the saved plan and controls access to its details; the GitHub artifact is intentionally limited to commit, run ID, aggregate add/change/destroy counts and whether approval is needed. Because the repository is public, anyone with repository read access can see that summary.
 
 ## Configuration
 
 Copy `envs/staging.tfvars.example` to an ignored local `staging.tfvars` only if needed. Provide sensitive inputs with `TF_VAR_*` environment variables in the protected staging environment. Required staging inputs are declared in `variables.tf`; blank owner choices intentionally have no silent defaults.
 
-`database_runtime_urls.staging` must use the separately provisioned least-privilege `rag_runtime` DB role. The Render Postgres owner connection is used only for the migration command. Do not point the application URL at the owner/migration role. S3-compatible storage remains owner-provisioned because this milestone does not select an account or incur bucket costs.
+`database_runtime_urls.staging` must use the separately provisioned least-privilege `rag_runtime` DB role. The Render Postgres owner connection is interpolated into the API's `pre_deploy_command` as a command-scoped `MIGRATION_DATABASE_URL`; it is not present in the shared API/worker environment group or in the running API/worker process environments. The pre-deploy command runs on a separate Render instance. Keep Terraform state, HCP plan access, and Render service configuration access restricted because the command and state depend on the privileged connection. Do not point the application URL at the owner/migration role. The separate first-tenant bootstrap is an operator one-off and must receive the migration URL only for that invocation; do not add it back to a persistent service env group. S3-compatible storage remains owner-provisioned because this milestone does not select an account or incur bucket costs.
+
+The query generation adapter uses the same Gemini credential as the embedding adapter. There is no separate generation API-key setting in the code. For staging, provide `EMBEDDING_API_KEY` inside the `staging` object of the protected GitHub Environment secret `TERRAFORM_APP_SECRETS_JSON`; Terraform writes it as `EMBEDDING_API_KEY` in the Render API/worker runtime group. The API uses it for both query embeddings and answer generation; the worker uses it for ingestion embeddings. Generation is enabled by default. Setting `GENERATION_ENABLED=false` disables answer generation but does not remove the key requirement for embedding.
 
 ## Network and telemetry
 
@@ -54,5 +67,8 @@ The API uses `/readyz` for Render deployment health checks and runs `alembic upg
 - [LangSmith tracing configuration](https://docs.langchain.com/langsmith/trace-with-langchain) documents the environment variables passed by the app group and region-specific endpoint selection.
 - [pgvector upstream](https://github.com/pgvector/pgvector) documents extension initialization with `CREATE EXTENSION vector;`.
 - [Terraform remote backend](https://developer.hashicorp.com/terraform/language/backend/remote): shared state backend and locking.
+- [HCP Terraform saved plans](https://developer.hashicorp.com/terraform/cloud-docs/workspaces/run/modes-and-options) describe `terraform plan -out` saved-plan runs, no auto-apply, and automatic stale-plan discard; [HCP Terraform Runs API](https://developer.hashicorp.com/terraform/cloud-docs/api-docs/run) documents `POST /runs/:run_id/actions/apply`, the 202 queued response, and the user/team-token requirement.
+- Render [pre-deploy commands](https://render.com/docs/deploys#pre-deploy-command) run on a separate instance before deployment; Render [private networking](https://render.com/docs/private-network) documents same-region service hostnames and the private service address shown in the dashboard.
+- GitHub [deployment environments](https://docs.github.com/en/actions/concepts/workflows-and-actions/deployment-environments) gate jobs and release environment secrets only after configured protection rules pass. GitHub [environment management](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments) documents required reviewer configuration.
 
-These docs were checked on 2026-11-16. Provider plan/apply remains the final schema and capability check before any resource is created.
+These docs were checked on 2026-11-18. Provider plan/apply remains the final schema and capability check before any resource is created. No Terraform plan or apply was run for this change.

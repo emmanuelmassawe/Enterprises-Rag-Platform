@@ -237,6 +237,13 @@ class Conversation(TenantRow, Base):
     __tablename__ = "conversations"
     __table_args__ = (
         UniqueConstraint("tenant_id", "id", name="uq_conversations_tenant_id_id"),
+        Index(
+            "ix_conversations_tenant_owner_key_updated",
+            "tenant_id",
+            "owner_key_id",
+            "updated_at",
+            "id",
+        ),
         ForeignKeyConstraint(
             ["tenant_id", "owner_id"],
             ["users.tenant_id", "users.id"],

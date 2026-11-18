@@ -86,6 +86,7 @@ jobs:
           create_privilege="$(docker exec "${{ job.services.postgres.id }}" psql -U rag_migrator -d enterprise_rag -At -v ON_ERROR_STOP=1 -c "SELECT has_schema_privilege('rag_runtime','public','CREATE')")"
           test "$create_privilege" = "f"
           uv run alembic upgrade head
+          uv run alembic check
           tenant_count="$(docker exec "${{ job.services.postgres.id }}" psql -U rag_migrator -d enterprise_rag -qAt -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM tenants")"
           test "$tenant_count" = "2"
           test "$(docker exec "${{ job.services.redis.id }}" redis-cli ping)" = "PONG"
