@@ -141,6 +141,10 @@ The conversation index is now included in SQLAlchemy metadata and CI runs `alemb
 
 The Gemini answer-generation adapter uses the existing `EMBEDDING_API_KEY`; there is no separate generation key setting. Staging provides it in `TERRAFORM_APP_SECRETS_JSON` under the `staging.EMBEDDING_API_KEY` entry.
 
+## M11 secret scan review (2026-11-18)
+
+Gitleaks 8.24.3 scanned 59 commits and initially reported three `generic-api-key` findings: a Terraform README description and two synthetic test values. The test API-key fixture is explicitly marked synthetic, and the other match is an idempotency test header. No live credential was identified in the redacted contexts. `.gitleaksignore` records only those three exact finding fingerprints; it does not allowlist their paths or commits broadly. The redacted full-history rescan then passed with no findings.
+
 ## Remaining release gates
 
 - Confirm proposed `gemini-embedding-2` and 768 dimensions, account region, retention and spend limits; add a dimension-specific vector index in a new approved migration and benchmark it with tenant filters.
